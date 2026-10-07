@@ -1,98 +1,91 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useEffect } from "react";
+import { View, Text, StyleSheet } from "react-native";
+import { router } from "expo-router";
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+export default function SplashScreen() {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      router.replace("/welcome");
+    }, 2200);
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+    <View style={styles.container}>
+      <View style={styles.logoContainer}>
+        <View style={styles.logoBubble}>
+          <Text style={styles.logoIcon}>✦</Text>
+        </View>
+      </View>
 
-export default function HomeScreen() {
-  return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+      <Text style={styles.title}>ChatFlow</Text>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+      <Text style={styles.subtitle}>
+        Connect. Chat. Share.
+      </Text>
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+      <View style={styles.loadingTrack}>
+        <View style={styles.loadingBar} />
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
+    backgroundColor: "#061F1F",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
+
+  logoContainer: {
+    marginBottom: 20,
   },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+
+  logoBubble: {
+    width: 82,
+    height: 82,
+    borderRadius: 28,
+    backgroundColor: "#18D6D1",
+    alignItems: "center",
+    justifyContent: "center",
+    transform: [{ rotate: "-8deg" }],
   },
+
+  logoIcon: {
+    fontSize: 42,
+    color: "#061F1F",
+    fontWeight: "bold",
+  },
+
   title: {
-    textAlign: 'center',
+    fontSize: 32,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: 0.5,
   },
-  code: {
-    textTransform: 'uppercase',
+
+  subtitle: {
+    marginTop: 7,
+    fontSize: 14,
+    color: "#91B9B8",
   },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+
+  loadingTrack: {
+    width: 120,
+    height: 4,
+    backgroundColor: "#244545",
+    borderRadius: 10,
+    marginTop: 35,
+    overflow: "hidden",
+  },
+
+  loadingBar: {
+    width: 55,
+    height: 4,
+    backgroundColor: "#18D6D1",
+    borderRadius: 10,
   },
 });
