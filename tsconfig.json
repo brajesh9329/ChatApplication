@@ -16,5 +16,5 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
-  ]
+, "src/app/_layout.jsx", "src/app/index.jsx", "src/app/welcome.jsx", "src/app/login.jsx", "src/app/signup.jsx", "src/app/otp.jsx", "src/app/home.jsx", "src/app/chat.jsx", "src/app/search.jsx", "src/app/contacts.jsx", "src/app/profile.jsx", "src/app/edit-profile.jsx", "src/app/settings.jsx", "src/app/explore.jsx"  ]
 }

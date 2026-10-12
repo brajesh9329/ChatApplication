@@ -8,40 +8,14 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-
 import { router, useLocalSearchParams } from "expo-router";
 
 const messages = [
-  {
-    id: "1",
-    text: "Hey bro! 👋",
-    time: "10:38 PM",
-    mine: false,
-  },
-  {
-    id: "2",
-    text: "Hey! How are you?",
-    time: "10:39 PM",
-    mine: true,
-  },
-  {
-    id: "3",
-    text: "I'm good. What about you?",
-    time: "10:40 PM",
-    mine: false,
-  },
-  {
-    id: "4",
-    text: "I'm doing great 😄",
-    time: "10:41 PM",
-    mine: true,
-  },
-  {
-    id: "5",
-    text: "Are you free tomorrow?",
-    time: "10:42 PM",
-    mine: false,
-  },
+  { id: "1", text: "Hey bro! 👋", time: "10:38 PM", mine: false },
+  { id: "2", text: "Hey! How are you?", time: "10:39 PM", mine: true },
+  { id: "3", text: "I'm good. What about you?", time: "10:40 PM", mine: false },
+  { id: "4", text: "I'm doing great 😄", time: "10:41 PM", mine: true },
+  { id: "5", text: "Are you free tomorrow?", time: "10:42 PM", mine: false },
 ];
 
 export default function ChatScreen() {
@@ -52,10 +26,7 @@ export default function ChatScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {/* HEADER */}
       <View style={styles.header}>
-
-        {/* Back */}
         <Pressable
           style={styles.backButton}
           onPress={() => router.back()}
@@ -63,40 +34,28 @@ export default function ChatScreen() {
           <Text style={styles.backIcon}>‹</Text>
         </Pressable>
 
-        {/* Avatar */}
         <View style={styles.userAvatar}>
           <Text style={styles.avatarText}>👤</Text>
-
           <View style={styles.online} />
         </View>
 
-        {/* User Info */}
         <View style={styles.userInfo}>
-          <Text style={styles.userName}>
-            Rahul Sharma
-          </Text>
-
+          <Text style={styles.userName}>Rahul Sharma</Text>
           <View style={styles.statusRow}>
             <View style={styles.statusDot} />
-
-            <Text style={styles.status}>
-              Online
-            </Text>
+            <Text style={styles.status}>Online</Text>
           </View>
         </View>
 
-        {/* Search */}
         <Pressable style={styles.headerIcon}>
           <Text style={styles.headerIconText}>⌕</Text>
         </Pressable>
 
-        {/* Menu */}
         <Pressable style={styles.headerIcon}>
           <Text style={styles.headerIconText}>⋮</Text>
         </Pressable>
       </View>
 
-      {/* MESSAGES */}
       <FlatList
         data={messages}
         keyExtractor={(item) => item.id}
@@ -112,24 +71,15 @@ export default function ChatScreen() {
             <View
               style={[
                 styles.bubble,
-                item.mine
-                  ? styles.myBubble
-                  : styles.otherBubble,
+                item.mine ? styles.myBubble : styles.otherBubble,
               ]}
             >
-              <Text style={styles.messageText}>
-                {item.text}
-              </Text>
+              <Text style={styles.messageText}>{item.text}</Text>
 
               <View style={styles.timeRow}>
-                <Text style={styles.messageTime}>
-                  {item.time}
-                </Text>
-
+                <Text style={styles.messageTime}>{item.time}</Text>
                 {item.mine && (
-                  <Text style={styles.readIcon}>
-                    ✓✓
-                  </Text>
+                  <Text style={styles.readIcon}>✓✓</Text>
                 )}
               </View>
             </View>
@@ -137,42 +87,28 @@ export default function ChatScreen() {
         )}
       />
 
-      {/* MESSAGE INPUT */}
       <View style={styles.inputArea}>
-
-        {/* Attachment */}
         <Pressable style={styles.attachButton}>
           <Text style={styles.attach}>＋</Text>
         </Pressable>
 
-        {/* Input */}
         <View style={styles.inputWrapper}>
           <TextInput
             style={styles.messageInput}
             placeholder="Type a message..."
             placeholderTextColor="#668180"
-            multiline={false}
           />
-
           <Pressable style={styles.emojiButton}>
-            <Text style={styles.emoji}>
-              ☺
-            </Text>
+            <Text style={styles.emoji}>☺</Text>
           </Pressable>
         </View>
 
-        {/* Camera */}
         <Pressable style={styles.cameraButton}>
-          <Text style={styles.camera}>
-            ◎
-          </Text>
+          <Text style={styles.camera}>◎</Text>
         </Pressable>
 
-        {/* Send */}
         <Pressable style={styles.sendButton}>
-          <Text style={styles.send}>
-            ➤
-          </Text>
+          <Text style={styles.send}>➤</Text>
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -184,9 +120,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#061F1F",
   },
-
-  /* ================= HEADER ================= */
-
   header: {
     height: 92,
     paddingTop: 38,
@@ -197,7 +130,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#173B3B",
   },
-
   backButton: {
     width: 38,
     height: 44,
@@ -205,13 +137,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 2,
   },
-
   backIcon: {
     color: "#FFFFFF",
     fontSize: 36,
     lineHeight: 38,
   },
-
   userAvatar: {
     width: 45,
     height: 45,
@@ -221,11 +151,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     position: "relative",
   },
-
   avatarText: {
     fontSize: 21,
   },
-
   online: {
     position: "absolute",
     width: 12,
@@ -237,24 +165,20 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#0A2929",
   },
-
   userInfo: {
     flex: 1,
     marginLeft: 11,
   },
-
   userName: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
   },
-
   statusRow: {
     flexDirection: "row",
     alignItems: "center",
     marginTop: 4,
   },
-
   statusDot: {
     width: 7,
     height: 7,
@@ -262,45 +186,35 @@ const styles = StyleSheet.create({
     backgroundColor: "#18D6D1",
     marginRight: 5,
   },
-
   status: {
     color: "#18D6D1",
     fontSize: 11,
-    fontWeight: "500",
   },
-
   headerIcon: {
-    width: 43,
+    width: 39,
     height: 43,
-    borderRadius: 22,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
   },
-
   headerIconText: {
     color: "#D7FFFF",
     fontSize: 25,
     fontWeight: "600",
   },
-
-  /* ================= MESSAGES ================= */
-
   messages: {
     paddingHorizontal: 15,
     paddingTop: 20,
     paddingBottom: 18,
   },
-
   messageContainer: {
     width: "100%",
     alignItems: "flex-start",
     marginBottom: 13,
   },
-
   myMessageContainer: {
     alignItems: "flex-end",
   },
-
   bubble: {
     maxWidth: "78%",
     paddingHorizontal: 15,
@@ -308,44 +222,35 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     borderRadius: 18,
   },
-
   otherBubble: {
     backgroundColor: "#172F2F",
     borderBottomLeftRadius: 5,
   },
-
   myBubble: {
     backgroundColor: "#18BDB9",
     borderBottomRightRadius: 5,
   },
-
   messageText: {
     color: "#FFFFFF",
     fontSize: 14,
     lineHeight: 20,
   },
-
   timeRow: {
     flexDirection: "row",
     justifyContent: "flex-end",
     alignItems: "center",
     marginTop: 5,
   },
-
   messageTime: {
     color: "#A7C9C7",
     fontSize: 9,
   },
-
   readIcon: {
     color: "#B9F4F1",
     fontSize: 10,
     marginLeft: 5,
     fontWeight: "700",
   },
-
-  /* ================= INPUT ================= */
-
   inputArea: {
     minHeight: 70,
     backgroundColor: "#0A2929",
@@ -356,20 +261,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 9,
   },
-
   attachButton: {
-    width: 39,
+    width: 35,
     height: 45,
     alignItems: "center",
     justifyContent: "center",
   },
-
   attach: {
     color: "#18D6D1",
     fontSize: 28,
-    fontWeight: "300",
   },
-
   inputWrapper: {
     flex: 1,
     height: 46,
@@ -380,49 +281,42 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-
   messageInput: {
     flex: 1,
     height: 44,
-    paddingHorizontal: 17,
+    paddingHorizontal: 14,
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: 13,
   },
-
   emojiButton: {
-    width: 40,
+    width: 32,
     height: 44,
     alignItems: "center",
     justifyContent: "center",
   },
-
   emoji: {
     color: "#799493",
-    fontSize: 22,
+    fontSize: 21,
   },
-
   cameraButton: {
-    width: 42,
+    width: 34,
     height: 45,
     alignItems: "center",
     justifyContent: "center",
   },
-
   camera: {
     color: "#A0B9B7",
-    fontSize: 25,
+    fontSize: 24,
   },
-
   sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: "#18D6D1",
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 2,
   },
-
   send: {
     color: "#062020",
     fontSize: 19,

@@ -1,5 +1,10 @@
 import { useEffect } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+} from "react-native";
 import { router } from "expo-router";
 
 export default function SplashScreen() {
@@ -13,21 +18,21 @@ export default function SplashScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.logoContainer}>
-        <View style={styles.logoBubble}>
-          <Text style={styles.logoIcon}>✦</Text>
-        </View>
+      <View style={styles.logoBox}>
+        <Text style={styles.logo}>C</Text>
       </View>
 
       <Text style={styles.title}>ChatFlow</Text>
 
       <Text style={styles.subtitle}>
-        Connect. Chat. Share.
+        Connect. Chat. Flow.
       </Text>
 
-      <View style={styles.loadingTrack}>
-        <View style={styles.loadingBar} />
-      </View>
+      <ActivityIndicator
+        size="small"
+        color="#18D6D1"
+        style={styles.loader}
+      />
     </View>
   );
 }
@@ -40,52 +45,36 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  logoContainer: {
-    marginBottom: 20,
-  },
-
-  logoBubble: {
+  logoBox: {
     width: 82,
     height: 82,
-    borderRadius: 28,
+    borderRadius: 27,
     backgroundColor: "#18D6D1",
     alignItems: "center",
     justifyContent: "center",
-    transform: [{ rotate: "-8deg" }],
+    marginBottom: 20,
   },
 
-  logoIcon: {
-    fontSize: 42,
-    color: "#061F1F",
-    fontWeight: "bold",
+  logo: {
+    color: "#062020",
+    fontSize: 48,
+    fontWeight: "900",
   },
 
   title: {
+    color: "#FFFFFF",
     fontSize: 32,
     fontWeight: "800",
-    color: "#FFFFFF",
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
 
   subtitle: {
-    marginTop: 7,
+    color: "#8BA7A5",
     fontSize: 14,
-    color: "#91B9B8",
+    marginTop: 8,
   },
 
-  loadingTrack: {
-    width: 120,
-    height: 4,
-    backgroundColor: "#244545",
-    borderRadius: 10,
+  loader: {
     marginTop: 35,
-    overflow: "hidden",
-  },
-
-  loadingBar: {
-    width: 55,
-    height: 4,
-    backgroundColor: "#18D6D1",
-    borderRadius: 10,
   },
 });
