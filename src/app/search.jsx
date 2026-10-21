@@ -7,12 +7,124 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
+import { apiRequest } from "../constants/Api";
 
 export default function SearchScreen() {
+  const params = useLocalSearchParams();
+
+  const loggedInUserId = Array.isArray(params.userId)
+    ? params.userId[0]
+    : params.userId;
+
   const [phone, setPhone] = useState("");
   const [searched, setSearched] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [startingChat, setStartingChat] = useState(false);
+  const [foundUser, setFoundUser] = useState(null);
+  const [error, setError] = useState("");
+
+  const searchUser = async () => {
+    const number = phone.trim();
+
+    setSearched(true);
+    setFoundUser(null);
+    setError("");
+
+    if (!/^\d{10}$/.test(number)) {
+      setError("Enter a valid 10-digit mobile number.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const user = await apiRequest(
+        `/api/users/phone/${encodeURIComponent(number)}`
+      );
+
+      if (!user?.id) {
+        throw new Error("User ID response mein nahi mila.");
+      }
+
+      if (
+        loggedInUserId &&
+        String(user.id) === String(loggedInUserId)
+      ) {
+        setError("You cannot start a chat with your own number.");
+        return;
+      }
+
+      setFoundUser(user);
+    } catch (err) {
+      const message = err?.message || "";
+
+      setError(
+        /not found|user not found|404/i.test(message)
+          ? "This number is not registered on ChatFlow."
+          : message || "User search failed. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startChat = async () => {
+    if (!loggedInUserId) {
+      setError(
+        "Logged-in user ID missing hai. Please dobara login karein."
+      );
+      return;
+    }
+
+    if (!foundUser?.id) {
+      setError("Please search for a registered user first.");
+      return;
+    }
+
+    if (String(foundUser.id) === String(loggedInUserId)) {
+      setError("You cannot start a chat with your own number.");
+      return;
+    }
+
+    setStartingChat(true);
+    setError("");
+
+    try {
+      const chat = await apiRequest(
+        `/api/chats/direct?userId1=${encodeURIComponent(String(loggedInUserId))}` +
+          `&userId2=${encodeURIComponent(String(foundUser.id))}`,
+        {
+          method: "POST",
+        }
+      );
+
+      const chatId = chat?.id ?? chat?.chatId;
+
+      if (chatId == null) {
+        throw new Error(
+          "Chat ID response mein nahi mili. Direct chat API response check karo."
+        );
+      }
+
+      router.push({
+        pathname: "/chat",
+        params: {
+          chatId: String(chatId),
+          id: String(chatId),
+          userId: String(loggedInUserId),
+          participantId: String(foundUser.id),
+          name: foundUser.name ?? "Chat",
+        },
+      });
+    } catch (err) {
+      setError(err?.message || "Unable to start chat.");
+    } finally {
+      setStartingChat(false);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -26,6 +138,7 @@ export default function SearchScreen() {
         >
           <Text style={styles.back}>‹</Text>
         </Pressable>
+
         <Text style={styles.title}>Find Someone</Text>
       </View>
 
@@ -35,6 +148,7 @@ export default function SearchScreen() {
 
       <View style={styles.searchBox}>
         <Text style={styles.countryCode}>🇮🇳 +91</Text>
+
         <TextInput
           style={styles.input}
           placeholder="Enter mobile number"
@@ -43,56 +157,88 @@ export default function SearchScreen() {
           maxLength={10}
           value={phone}
           onChangeText={(value) => {
-            setPhone(value);
+            setPhone(value.replace(/\D/g, ""));
             setSearched(false);
+            setFoundUser(null);
+            setError("");
           }}
+          onSubmitEditing={searchUser}
+          returnKeyType="search"
         />
       </View>
 
       <Pressable
-        style={styles.button}
-        onPress={() => setSearched(true)}
+        style={[
+          styles.button,
+          loading && styles.disabledButton,
+        ]}
+        onPress={searchUser}
+        disabled={loading}
       >
-        <Text style={styles.buttonText}>Search User</Text>
-        <Text style={styles.arrow}>⌕</Text>
+        {loading ? (
+          <ActivityIndicator color="#062020" />
+        ) : (
+          <>
+            <Text style={styles.buttonText}>Search User</Text>
+            <Text style={styles.arrow}>⌕</Text>
+          </>
+        )}
       </Pressable>
 
       {searched && (
         <View style={styles.resultCard}>
-          {phone.length === 10 ? (
+          {loading ? (
+            <ActivityIndicator color="#18D6D1" />
+          ) : error ? (
+            <Text style={styles.errorText}>{error}</Text>
+          ) : foundUser ? (
             <>
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>👨</Text>
-              </View>
-
-              <View style={styles.userInfo}>
-                <Text style={styles.userName}>Rahul Sharma</Text>
-                <Text style={styles.phone}>{phone}</Text>
-                <Text style={styles.demoNote}>
-                  Demo search result
+                <Text style={styles.avatarText}>
+                  {foundUser.profileImage ? "🖼️" : "👤"}
                 </Text>
               </View>
 
+              <View style={styles.userInfo}>
+                <Text style={styles.userName}>
+                  {foundUser.name ?? "ChatFlow User"}
+                </Text>
+
+                <Text style={styles.phone}>
+                  {foundUser.phoneNumber ?? phone}
+                </Text>
+
+                {foundUser.about ? (
+                  <Text style={styles.about} numberOfLines={2}>
+                    {foundUser.about}
+                  </Text>
+                ) : null}
+              </View>
+
               <Pressable
-                style={styles.chatButton}
-                onPress={() => router.push("/chat?id=1")}
+                style={[
+                  styles.chatButton,
+                  startingChat && styles.disabledButton,
+                ]}
+                onPress={startChat}
+                disabled={startingChat}
               >
-                <Text style={styles.chatButtonText}>Chat</Text>
+                {startingChat ? (
+                  <ActivityIndicator color="#062020" />
+                ) : (
+                  <Text style={styles.chatButtonText}>Chat</Text>
+                )}
               </Pressable>
             </>
-          ) : (
-            <Text style={styles.errorText}>
-              Enter a valid 10-digit mobile number.
-            </Text>
-          )}
+          ) : null}
         </View>
       )}
 
       <View style={styles.tipBox}>
         <Text style={styles.tipIcon}>✦</Text>
         <Text style={styles.tipText}>
-          You can find people who are using ChatFlow by their registered
-          mobile number.
+          You can find people who are using ChatFlow by their
+          registered mobile number.
         </Text>
       </View>
     </KeyboardAvoidingView>
@@ -166,6 +312,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  disabledButton: {
+    opacity: 0.65,
+  },
   buttonText: {
     color: "#062020",
     fontSize: 14,
@@ -201,6 +350,7 @@ const styles = StyleSheet.create({
   userInfo: {
     flex: 1,
     marginLeft: 12,
+    marginRight: 8,
   },
   userName: {
     color: "#FFFFFF",
@@ -212,9 +362,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 4,
   },
-  demoNote: {
-    color: "#18D6D1",
-    fontSize: 9,
+  about: {
+    color: "#8BA7A5",
+    fontSize: 10,
     marginTop: 4,
   },
   chatButton: {

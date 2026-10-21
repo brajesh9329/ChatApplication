@@ -5,54 +5,123 @@ import {
   Pressable,
   ScrollView,
   TextInput,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
-import { router } from "expo-router";
+import { useCallback, useState } from "react";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { apiRequest } from "../constants/Api";
 
-const chats = [
-  {
-    id: "1",
-    name: "Rahul Sharma",
-    message: "Hey bro! 👋",
-    time: "10:42 PM",
-    unread: 2,
-    avatar: "👨",
-    online: true,
-  },
-  {
-    id: "2",
-    name: "Priya Verma",
-    message: "See you tomorrow!",
-    time: "9:30 PM",
-    unread: 0,
-    avatar: "👩",
-    online: true,
-  },
-  {
-    id: "3",
-    name: "Aman Singh",
-    message: "Photo bhej dena",
-    time: "8:15 PM",
-    unread: 1,
-    avatar: "🧑",
-    online: false,
-  },
-  {
-    id: "4",
-    name: "College Friends",
-    message: "You: Okay, see you!",
-    time: "Yesterday",
-    unread: 0,
-    avatar: "👥",
-    online: false,
-  },
-];
+const formatChatTime = (value) => {
+  if (!value) return "";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+
+  if (sameDay) {
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+
+  if (date.toDateString() === yesterday.toDateString()) {
+    return "Yesterday";
+  }
+
+  return date.toLocaleDateString([], {
+    day: "2-digit",
+    month: "short",
+  });
+};
 
 export default function HomeScreen() {
+  const { userId, name, phone } = useLocalSearchParams();
+
+  const [chats, setChats] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+
+  const currentUserId = Array.isArray(userId) ? userId[0] : userId;
+  const displayName = Array.isArray(name) ? name[0] : name;
+
+  const loadChats = useCallback(async (isRefresh = false) => {
+    if (!currentUserId) {
+      setError("User ID nahi mila. Please dobara login karein.");
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
+    setError("");
+
+    try {
+      const response = await apiRequest(
+        `/api/chats/user/${encodeURIComponent(currentUserId)}/list`
+      );
+
+      if (!Array.isArray(response)) {
+        throw new Error("Server se chat list ka response valid nahi hai.");
+      }
+
+      setChats(
+        response.map((item) => ({
+          id: String(item.chatId),
+          name:
+            item.participantName ||
+            (item.type === "GROUP" ? "Group Chat" : "Unknown User"),
+          message: item.lastMessage || "No messages yet",
+          time: formatChatTime(item.lastMessageAt),
+          participantId: item.participantId,
+          type: item.type,
+          avatar: item.type === "GROUP" ? "👥" : "👤",
+        }))
+      );
+    } catch (err) {
+      setError(err.message || "Chats load nahi ho paayi.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [currentUserId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadChats();
+    }, [loadChats])
+  );
+
+  const filteredChats = chats.filter((chat) => {
+    const query = search.trim().toLowerCase();
+
+    return (
+      chat.name.toLowerCase().includes(query) ||
+      chat.message.toLowerCase().includes(query)
+    );
+  });
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>Welcome back 👋</Text>
+          <Text style={styles.greeting}>
+            Welcome{displayName ? `, ${displayName}` : " back"} 👋
+          </Text>
           <Text style={styles.title}>Chats</Text>
         </View>
 
@@ -79,52 +148,121 @@ export default function HomeScreen() {
           style={styles.searchInput}
           placeholder="Search conversations..."
           placeholderTextColor="#668180"
-          onFocus={() => router.push("/search")}
+          value={search}
+          onChangeText={setSearch}
+          autoCapitalize="none"
         />
       </View>
 
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Recent Chats</Text>
-        <Text style={styles.count}>{chats.length} conversations</Text>
+        <Text style={styles.count}>
+          {chats.length} conversations
+        </Text>
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.chatList}
-      >
-        {chats.map((chat) => (
+      {loading ? (
+        <View style={styles.stateContainer}>
+          <ActivityIndicator size="large" color="#18D6D1" />
+          <Text style={styles.stateText}>Loading chats...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.stateContainer}>
+          <Text style={styles.stateText}>{error}</Text>
           <Pressable
-            key={chat.id}
-            style={styles.chatCard}
-            onPress={() => router.push(`/chat?id=${chat.id}`)}
+            style={styles.retryButton}
+            onPress={() => loadChats()}
           >
-            <View style={styles.avatarContainer}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{chat.avatar}</Text>
-              </View>
-
-              {chat.online && <View style={styles.onlineDot} />}
-            </View>
-
-            <View style={styles.chatInfo}>
-              <Text style={styles.chatName}>{chat.name}</Text>
-              <Text style={styles.lastMessage} numberOfLines={1}>
-                {chat.message}
+            <Text style={styles.retryText}>Try Again</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.chatList,
+            filteredChats.length === 0 && styles.emptyChatList,
+          ]}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => loadChats(true)}
+              tintColor="#18D6D1"
+              colors={["#18D6D1"]}
+            />
+          }
+          keyboardShouldPersistTaps="handled"
+        >
+          {filteredChats.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyIcon}>
+                {search.trim() ? "⌕" : "💬"}
               </Text>
-            </View>
-
-            <View style={styles.chatMeta}>
-              <Text style={styles.chatTime}>{chat.time}</Text>
-
-              {chat.unread > 0 && (
-                <View style={styles.unreadBadge}>
-                  <Text style={styles.unreadText}>{chat.unread}</Text>
-                </View>
+              <Text style={styles.emptyTitle}>
+                {search.trim() ? "No matching chats" : "No chats yet"}
+              </Text>
+              <Text style={styles.stateText}>
+                {search.trim()
+                  ? "Try another name or message."
+                  : "Start a conversation to see it here."}
+              </Text>
+              {!search.trim() && (
+                <Pressable
+                  style={styles.retryButton}
+                  onPress={() => router.push({
+    pathname: "/search",
+    params: { userId: String(currentUserId) },
+  })}
+                >
+                  <Text style={styles.retryText}>Find People</Text>
+                </Pressable>
               )}
             </View>
-          </Pressable>
-        ))}
-      </ScrollView>
+          ) : (
+            filteredChats.map((chat) => (
+              <Pressable
+                key={chat.id}
+                style={styles.chatCard}
+                onPress={() =>
+                  router.push({
+                    pathname: "/chat",
+                    params: {
+                      id: chat.id,
+                      chatId: chat.id,
+                      userId: String(currentUserId),
+                      participantId:
+                        chat.participantId != null
+                          ? String(chat.participantId)
+                          : "",
+                      name: chat.name,
+                      phone: phone ? String(phone) : "",
+                    },
+                  })
+                }
+              >
+                <View style={styles.avatarContainer}>
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>{chat.avatar}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.chatInfo}>
+                  <Text style={styles.chatName} numberOfLines={1}>
+                    {chat.name}
+                  </Text>
+                  <Text style={styles.lastMessage} numberOfLines={1}>
+                    {chat.message}
+                  </Text>
+                </View>
+
+                <View style={styles.chatMeta}>
+                  <Text style={styles.chatTime}>{chat.time}</Text>
+                </View>
+              </Pressable>
+            ))
+          )}
+        </ScrollView>
+      )}
 
       <View style={styles.bottomNav}>
         <Pressable style={styles.navItem}>
@@ -134,7 +272,10 @@ export default function HomeScreen() {
 
         <Pressable
           style={styles.navItem}
-          onPress={() => router.push("/search")}
+          onPress={() => router.push({
+    pathname: "/search",
+    params: { userId: String(currentUserId) },
+  })}
         >
           <Text style={styles.navIcon}>⌕</Text>
           <Text style={styles.navText}>Search</Text>
@@ -142,7 +283,10 @@ export default function HomeScreen() {
 
         <Pressable
           style={styles.addButton}
-          onPress={() => router.push("/search")}
+          onPress={() => router.push({
+    pathname: "/search",
+    params: { userId: String(currentUserId) },
+  })}
         >
           <Text style={styles.addIcon}>＋</Text>
         </Pressable>
@@ -250,6 +394,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingBottom: 20,
   },
+  emptyChatList: {
+    flexGrow: 1,
+  },
   chatCard: {
     minHeight: 79,
     backgroundColor: "#0B2929",
@@ -275,17 +422,6 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 24,
   },
-  onlineDot: {
-    position: "absolute",
-    right: -2,
-    bottom: -1,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#18D6D1",
-    borderWidth: 2,
-    borderColor: "#0B2929",
-  },
   chatInfo: {
     flex: 1,
     marginLeft: 12,
@@ -309,19 +445,45 @@ const styles = StyleSheet.create({
     color: "#668180",
     fontSize: 9,
   },
-  unreadBadge: {
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: 5,
-    borderRadius: 10,
-    backgroundColor: "#18D6D1",
+  stateContainer: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 7,
+    paddingHorizontal: 30,
   },
-  unreadText: {
+  stateText: {
+    color: "#829C9A",
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 10,
+  },
+  emptyContainer: {
+    flex: 1,
+    minHeight: 220,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  emptyIcon: {
+    color: "#18D6D1",
+    fontSize: 34,
+    marginBottom: 12,
+  },
+  emptyTitle: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    backgroundColor: "#18D6D1",
+  },
+  retryText: {
     color: "#062020",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   bottomNav: {

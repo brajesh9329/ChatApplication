@@ -7,24 +7,266 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
+import { Client } from "@stomp/stompjs";
+import { apiRequest, API_BASE_URL } from "../constants/Api";
 
-const messages = [
-  { id: "1", text: "Hey bro! 👋", time: "10:38 PM", mine: false },
-  { id: "2", text: "Hey! How are you?", time: "10:39 PM", mine: true },
-  { id: "3", text: "I'm good. What about you?", time: "10:40 PM", mine: false },
-  { id: "4", text: "I'm doing great 😄", time: "10:41 PM", mine: true },
-  { id: "5", text: "Are you free tomorrow?", time: "10:42 PM", mine: false },
-];
+const formatTime = (value) => {
+  if (!value) return "";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
 
 export default function ChatScreen() {
-  const { id } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+
+  const chatId = String(params.chatId ?? params.id ?? "");
+  const userId = String(params.userId ?? "");
+  const participantId = String(params.participantId ?? "");
+  const chatName = String(params.name ?? "Chat");
+
+  const [messages, setMessages] = useState([]);
+  const [messageText, setMessageText] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const [connected, setConnected] = useState(false);
+
+  const clientRef = useRef(null);
+  const listRef = useRef(null);
+  const messageIdsRef = useRef(new Set());
+
+  const addMessage = useCallback((message) => {
+    if (!message?.id) return;
+
+    const key = String(message.id);
+
+    if (messageIdsRef.current.has(key)) return;
+
+    messageIdsRef.current.add(key);
+
+    setMessages((previous) => [
+      ...previous,
+      {
+        id: key,
+        text: message.content ?? "",
+        time: formatTime(message.createdAt),
+        mine: String(message.senderId) === userId,
+      },
+    ]);
+  }, [userId]);
+
+  const loadMessages = useCallback(async () => {
+    if (!chatId || !userId) {
+      setError("Chat ID ya logged-in user ID nahi mila.");
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await apiRequest(
+        `/api/messages/chat/${encodeURIComponent(chatId)}` +
+        `?userId=${encodeURIComponent(userId)}&page=0&size=100`
+      );
+
+      const content = Array.isArray(response)
+        ? response
+        : response?.content;
+
+      if (!Array.isArray(content)) {
+        throw new Error("Message history ka response valid nahi hai.");
+      }
+
+      const sorted = [...content].sort((a, b) => {
+        const timeA = new Date(a.createdAt).getTime();
+        const timeB = new Date(b.createdAt).getTime();
+
+        if (timeA !== timeB) return timeA - timeB;
+        return Number(a.id) - Number(b.id);
+      });
+
+      messageIdsRef.current = new Set(
+        sorted.map((message) => String(message.id))
+      );
+
+      setMessages(
+        sorted.map((message) => ({
+          id: String(message.id),
+          text: message.content ?? "",
+          time: formatTime(message.createdAt),
+          mine: String(message.senderId) === userId,
+        }))
+      );
+    } catch (err) {
+      setError(err.message || "Messages load nahi ho paaye.");
+    } finally {
+      setLoading(false);
+    }
+  }, [chatId, userId]);
+
+  useEffect(() => {
+    loadMessages();
+  }, [loadMessages]);
+
+
+
+  // new update
+const refreshMessages = useCallback(async () => {
+  if (!chatId || !userId) return;
+
+  try {
+    const response = await apiRequest(
+      `/api/messages/chat/${encodeURIComponent(chatId)}` +
+        `?userId=${encodeURIComponent(userId)}&page=0&size=100`
+    );
+
+    const content = Array.isArray(response)
+      ? response
+      : response?.content;
+
+    if (!Array.isArray(content)) return;
+
+    content.forEach((message) => {
+      if (!message?.id) return;
+
+      const key = String(message.id);
+
+      if (messageIdsRef.current.has(key)) return;
+
+      messageIdsRef.current.add(key);
+
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: key,
+          text: message.content ?? "",
+          time: formatTime(message.createdAt),
+          mine: String(message.senderId) === userId,
+        },
+      ]);
+    });
+  } catch (err) {
+    console.log("Background message refresh failed:", err.message);
+  }
+}, [chatId, userId]);
+
+useEffect(() => {
+  if (!chatId || !userId) return;
+
+  const intervalId = setInterval(() => {
+    refreshMessages();
+  }, 2000);
+
+  return () => clearInterval(intervalId);
+}, [chatId, userId, refreshMessages]);
+
+
+
+useEffect(() => {
+  if (!chatId || !userId) return;
+
+  const wsUrl =
+    API_BASE_URL.replace(/\/$/, "")
+      .replace(/^https:/, "wss:")
+      .replace(/^http:/, "ws:") + "/ws";
+
+  console.log("WebSocket URL:", wsUrl);
+
+  const client = new Client({
+    webSocketFactory: () => new WebSocket(wsUrl),
+    reconnectDelay: 5000,
+
+    onConnect: () => {
+      console.log("STOMP connected");
+      setConnected(true);
+
+      client.subscribe(`/topic/chat/${chatId}`, (frame) => {
+        try {
+          addMessage(JSON.parse(frame.body));
+        } catch (error) {
+          console.warn("Message parsing error:", error);
+        }
+      });
+    },
+
+    onWebSocketError: (event) => {
+      console.warn("WebSocket error:", event?.message);
+    },
+
+    onWebSocketClose: (event) => {
+      console.log("WebSocket closed:", event?.code, event?.reason);
+      setConnected(false);
+    },
+
+    onStompError: (frame) => {
+      console.warn("STOMP error:", frame.headers?.message);
+      setConnected(false);
+    },
+  });
+
+  clientRef.current = client;
+  client.activate();
+
+  return () => {
+    clientRef.current = null;
+    setConnected(false);
+    client.deactivate();
+  };
+}, [chatId, userId, addMessage]);
+
+  const sendMessage = async () => {
+    const content = messageText.trim();
+
+    if (!content || sending) return;
+
+    if (!chatId || !userId) {
+      Alert.alert("Error", "Chat ID ya user ID missing hai.");
+      return;
+    }
+
+    setSending(true);
+
+    try {
+      // REST endpoint saves the message to the database.
+      const savedMessage = await apiRequest(
+        `/api/messages/chat/${encodeURIComponent(chatId)}` +
+        `/sender/${encodeURIComponent(userId)}`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            content,
+            messageType: "TEXT",
+          }),
+        }
+      );
+
+      addMessage(savedMessage);
+      setMessageText("");
+    } catch (err) {
+      Alert.alert("Message failed", err.message || "Message send nahi hua.");
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
     >
       <View style={styles.header}>
         <Pressable
@@ -36,14 +278,28 @@ export default function ChatScreen() {
 
         <View style={styles.userAvatar}>
           <Text style={styles.avatarText}>👤</Text>
-          <View style={styles.online} />
+          <View
+            style={[
+              styles.online,
+              !connected && styles.offline,
+            ]}
+          />
         </View>
 
         <View style={styles.userInfo}>
-          <Text style={styles.userName}>Rahul Sharma</Text>
+          <Text style={styles.userName} numberOfLines={1}>
+            {chatName}
+          </Text>
           <View style={styles.statusRow}>
-            <View style={styles.statusDot} />
-            <Text style={styles.status}>Online</Text>
+            <View
+              style={[
+                styles.statusDot,
+                !connected && styles.offline,
+              ]}
+            />
+            <Text style={styles.status}>
+              {connected ? "Connected" : "Connecting..."}
+            </Text>
           </View>
         </View>
 
@@ -56,39 +312,69 @@ export default function ChatScreen() {
         </Pressable>
       </View>
 
-      <FlatList
-        data={messages}
-        keyExtractor={(item) => item.id}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.messages}
-        renderItem={({ item }) => (
-          <View
-            style={[
-              styles.messageContainer,
-              item.mine && styles.myMessageContainer,
-            ]}
-          >
+      {loading ? (
+        <View style={styles.centerState}>
+          <ActivityIndicator size="large" color="#18D6D1" />
+          <Text style={styles.stateText}>Loading messages...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.centerState}>
+          <Text style={styles.stateText}>{error}</Text>
+          <Pressable style={styles.retryButton} onPress={loadMessages}>
+            <Text style={styles.retryText}>Try Again</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <FlatList
+          ref={listRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.messages}
+          onContentSizeChange={() =>
+            listRef.current?.scrollToEnd({ animated: true })
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={styles.stateText}>
+                No messages yet. Say hello!
+              </Text>
+            </View>
+          }
+          renderItem={({ item }) => (
             <View
               style={[
-                styles.bubble,
-                item.mine ? styles.myBubble : styles.otherBubble,
+                styles.messageContainer,
+                item.mine && styles.myMessageContainer,
               ]}
             >
-              <Text style={styles.messageText}>{item.text}</Text>
+             <View
+        style={[
+          styles.messageBubble,
+          item.mine ? styles.myMessage : styles.otherMessage,
+        ]}
+      >
+                <Text style={styles.messageText}>{item.text}</Text>
 
-              <View style={styles.timeRow}>
-                <Text style={styles.messageTime}>{item.time}</Text>
-                {item.mine && (
-                  <Text style={styles.readIcon}>✓✓</Text>
-                )}
+                <View style={styles.timeRow}>
+                  <Text style={styles.messageTime}>{item.time}</Text>
+                  {item.mine && (
+                    <Text style={styles.readIcon}>✓</Text>
+                  )}
+                </View>
               </View>
             </View>
-          </View>
-        )}
-      />
+          )}
+        />
+      )}
 
       <View style={styles.inputArea}>
-        <Pressable style={styles.attachButton}>
+        <Pressable
+          style={styles.attachButton}
+          onPress={() =>
+            Alert.alert("Attachments", "Attachment support will be added next.")
+          }
+        >
           <Text style={styles.attach}>＋</Text>
         </Pressable>
 
@@ -97,18 +383,41 @@ export default function ChatScreen() {
             style={styles.messageInput}
             placeholder="Type a message..."
             placeholderTextColor="#668180"
+            value={messageText}
+            onChangeText={setMessageText}
+            multiline
+            maxLength={4000}
           />
-          <Pressable style={styles.emojiButton}>
+          <Pressable
+            style={styles.emojiButton}
+            onPress={() => setMessageText((text) => text + " 😊")}
+          >
             <Text style={styles.emoji}>☺</Text>
           </Pressable>
         </View>
 
-        <Pressable style={styles.cameraButton}>
+        <Pressable
+          style={styles.cameraButton}
+          onPress={() =>
+            Alert.alert("Camera", "Camera support will be added next.")
+          }
+        >
           <Text style={styles.camera}>◎</Text>
         </Pressable>
 
-        <Pressable style={styles.sendButton}>
-          <Text style={styles.send}>➤</Text>
+        <Pressable
+          style={[
+            styles.sendButton,
+            (!messageText.trim() || sending) && styles.disabledSend,
+          ]}
+          onPress={sendMessage}
+          disabled={!messageText.trim() || sending}
+        >
+          {sending ? (
+            <ActivityIndicator size="small" color="#062020" />
+          ) : (
+            <Text style={styles.send}>➤</Text>
+          )}
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -165,6 +474,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#0A2929",
   },
+  offline: {
+    backgroundColor: "#718B8A",
+  },
   userInfo: {
     flex: 1,
     marginLeft: 11,
@@ -206,6 +518,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingTop: 20,
     paddingBottom: 18,
+    flexGrow: 1,
   },
   messageContainer: {
     width: "100%",
@@ -273,7 +586,7 @@ const styles = StyleSheet.create({
   },
   inputWrapper: {
     flex: 1,
-    height: 46,
+    minHeight: 46,
     backgroundColor: "#102B2B",
     borderRadius: 23,
     borderWidth: 1,
@@ -283,8 +596,10 @@ const styles = StyleSheet.create({
   },
   messageInput: {
     flex: 1,
-    height: 44,
+    minHeight: 44,
+    maxHeight: 110,
     paddingHorizontal: 14,
+    paddingVertical: 10,
     color: "#FFFFFF",
     fontSize: 13,
   },
@@ -317,9 +632,42 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginLeft: 2,
   },
+  disabledSend: {
+    opacity: 0.55,
+  },
   send: {
     color: "#062020",
     fontSize: 19,
     marginLeft: 2,
+  },
+  centerState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 25,
+  },
+  stateText: {
+    color: "#829C9A",
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 10,
+  },
+  emptyState: {
+    flex: 1,
+    minHeight: 200,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    backgroundColor: "#18D6D1",
+  },
+  retryText: {
+    color: "#062020",
+    fontSize: 12,
+    fontWeight: "800",
   },
 });

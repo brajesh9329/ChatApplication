@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import {
   View,
@@ -8,12 +9,75 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
+import { apiRequest } from "../constants/Api";
 
 export default function SignupScreen() {
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // Phone number OTP screen se receive hoga
+  const { phone } = useLocalSearchParams();
+
+  const handleRegister = async () => {
+    const cleanName = name.trim();
+    const cleanPhone = String(phone || "").trim();
+
+    if (!cleanPhone) {
+      Alert.alert(
+        "Phone Number Missing",
+        "Please go back and verify your phone number again."
+      );
+      return;
+    }
+
+    if (!cleanName) {
+      Alert.alert("Name Required", "Please enter your full name.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const user = await apiRequest("/api/auth/register", {
+        method: "POST",
+        body: JSON.stringify({
+          phoneNumber: cleanPhone,
+          name: cleanName,
+        }),
+      });
+
+      Alert.alert(
+        "Registration Successful",
+        `Welcome to ChatFlow, ${user.name || cleanName}!`,
+        [
+          {
+            text: "Continue",
+            onPress: () => {
+              router.replace({
+                pathname: "/home",
+                params: {
+                  userId: String(user.userId),
+                  name: user.name || cleanName,
+                  phone: user.phoneNumber || cleanPhone,
+                },
+              });
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      Alert.alert(
+        "Registration Failed",
+        error.message || "Unable to create your account. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -27,11 +91,13 @@ export default function SignupScreen() {
         <Pressable
           style={styles.backButton}
           onPress={() => router.back()}
+          disabled={loading}
         >
           <Text style={styles.back}>‹</Text>
         </Pressable>
 
         <Text style={styles.title}>Create Account</Text>
+
         <Text style={styles.subtitle}>
           Join ChatFlow and start a conversation.
         </Text>
@@ -44,39 +110,55 @@ export default function SignupScreen() {
         </View>
 
         <Text style={styles.label}>Full Name</Text>
+
         <TextInput
           style={styles.input}
           placeholder="Enter your name"
           placeholderTextColor="#668180"
           value={name}
           onChangeText={setName}
+          maxLength={100}
+          autoCapitalize="words"
+          editable={!loading}
         />
 
         <Text style={styles.label}>Mobile Number</Text>
+
         <View style={styles.phoneBox}>
           <Text style={styles.countryCode}>🇮🇳 +91</Text>
+
           <TextInput
             style={styles.phoneInput}
-            placeholder="Enter mobile number"
+            placeholder="Verified mobile number"
             placeholderTextColor="#668180"
             keyboardType="phone-pad"
-            maxLength={10}
-            value={phone}
-            onChangeText={setPhone}
+            value={String(phone || "")}
+            editable={false}
           />
         </View>
 
         <Pressable
-          style={styles.button}
-          onPress={() => router.push("/otp")}
+          style={[styles.button, loading && styles.disabledButton]}
+          onPress={handleRegister}
+          disabled={loading}
         >
-          <Text style={styles.buttonText}>Create Account</Text>
-          <Text style={styles.arrow}>→</Text>
+          {loading ? (
+            <ActivityIndicator color="#062020" />
+          ) : (
+            <>
+              <Text style={styles.buttonText}>Create Account</Text>
+              <Text style={styles.arrow}>→</Text>
+            </>
+          )}
         </Pressable>
 
         <View style={styles.loginRow}>
           <Text style={styles.muted}>Already have an account? </Text>
-          <Pressable onPress={() => router.push("/login")}>
+
+          <Pressable
+            onPress={() => router.replace("/login")}
+            disabled={loading}
+          >
             <Text style={styles.link}>Login</Text>
           </Pressable>
         </View>
@@ -199,6 +281,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
   buttonText: {
     color: "#062020",

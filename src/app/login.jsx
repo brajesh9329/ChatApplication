@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import {
   View,
@@ -8,11 +9,68 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { router } from "expo-router";
+import { apiRequest } from "../constants/Api";
 
 export default function LoginScreen() {
   const [phone, setPhone] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleContinue = async () => {
+    const cleanPhone = phone.trim();
+
+    if (!/^\d{10}$/.test(cleanPhone)) {
+      Alert.alert(
+        "Invalid Number",
+        "Enter a valid 10-digit mobile number."
+      );
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const data = await apiRequest("/api/auth/send-otp", {
+        method: "POST",
+        body: JSON.stringify({
+          phoneNumber: cleanPhone,
+        }),
+      });
+
+      if (data.testOtp) {
+        Alert.alert(
+          "Testing OTP",
+          `Your OTP is: ${data.testOtp}`,
+          [
+            {
+              text: "Continue",
+              onPress: () => {
+                router.push({
+                  pathname: "/otp",
+                  params: { phone: cleanPhone },
+                });
+              },
+            },
+          ]
+        );
+      } else {
+        router.push({
+          pathname: "/otp",
+          params: { phone: cleanPhone },
+        });
+      }
+    } catch (error) {
+      Alert.alert(
+        "OTP Error",
+        error.message || "Unable to send OTP. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -35,6 +93,7 @@ export default function LoginScreen() {
         </View>
 
         <Text style={styles.title}>Welcome back!</Text>
+
         <Text style={styles.subtitle}>
           Login to continue chatting with your friends.
         </Text>
@@ -43,6 +102,7 @@ export default function LoginScreen() {
 
         <View style={styles.phoneBox}>
           <Text style={styles.countryCode}>🇮🇳 +91</Text>
+
           <TextInput
             style={styles.input}
             placeholder="Enter mobile number"
@@ -50,21 +110,36 @@ export default function LoginScreen() {
             keyboardType="phone-pad"
             maxLength={10}
             value={phone}
-            onChangeText={setPhone}
+            onChangeText={(value) =>
+              setPhone(value.replace(/\D/g, "").slice(0, 10))
+            }
           />
         </View>
 
         <Pressable
-          style={styles.button}
-          onPress={() => router.push("/otp")}
+          style={[styles.button, loading && styles.disabledButton]}
+          onPress={handleContinue}
+          disabled={loading}
         >
-          <Text style={styles.buttonText}>Continue</Text>
-          <Text style={styles.arrow}>→</Text>
+          {loading ? (
+            <ActivityIndicator color="#062020" />
+          ) : (
+            <>
+              <Text style={styles.buttonText}>Continue</Text>
+              <Text style={styles.arrow}>→</Text>
+            </>
+          )}
         </Pressable>
 
         <View style={styles.signupRow}>
-          <Text style={styles.muted}>Don't have an account? </Text>
-          <Pressable onPress={() => router.push("/signup")}>
+          <Text style={styles.muted}>
+            Don't have an account?{" "}
+          </Text>
+
+          <Pressable
+            onPress={() => router.push("/signup")}
+            disabled={loading}
+          >
             <Text style={styles.link}>Sign Up</Text>
           </Pressable>
         </View>
@@ -163,6 +238,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
   buttonText: {
     color: "#062020",

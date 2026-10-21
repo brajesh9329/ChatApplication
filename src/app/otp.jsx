@@ -1,3 +1,4 @@
+
 import { useRef, useState } from "react";
 import {
   View,
@@ -7,15 +8,21 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
+import { apiRequest } from "../constants/Api";
 
 export default function OtpScreen() {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [loading, setLoading] = useState(false);
   const inputs = useRef([]);
 
+  const { phone } = useLocalSearchParams();
+
   const handleChange = (value, index) => {
-    const digit = value.replace(/[^0-9]/g, "").slice(-1);
+    const digit = value.replace(/\D/g, "").slice(-1);
     const updatedOtp = [...otp];
 
     updatedOtp[index] = digit;
@@ -36,6 +43,100 @@ export default function OtpScreen() {
     }
   };
 
+  const handleVerify = async () => {
+    const enteredOtp = otp.join("");
+
+    if (!phone) {
+      Alert.alert("Error", "Phone number missing. Please try again.");
+      return;
+    }
+
+    if (!/^\d{6}$/.test(enteredOtp)) {
+      Alert.alert("Invalid OTP", "Please enter all 6 digits.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Step 1: Verify OTP with backend
+      const verification = await apiRequest("/api/auth/verify-otp", {
+        method: "POST",
+        body: JSON.stringify({
+          phoneNumber: String(phone),
+          otp: enteredOtp,
+        }),
+      });
+
+      if (verification.registered) {
+        // Step 2A: Existing user — login
+        const user = await apiRequest("/api/auth/login", {
+          method: "POST",
+          body: JSON.stringify({
+            phoneNumber: String(phone),
+          }),
+        });
+
+        Alert.alert("Success", "Login successful!", [
+          {
+            text: "Continue",
+            onPress: () =>
+              router.replace({
+                pathname: "/home",
+                params: {
+                  userId: String(user.userId),
+                  name: user.name ?? "",
+                  phone: String(phone),
+                },
+              }),
+          },
+        ]);
+      } else {
+        // Step 2B: New user — continue to registration
+        router.replace({
+          pathname: "/signup",
+          params: { phone: String(phone) },
+        });
+      }
+    } catch (error) {
+      Alert.alert(
+        "Verification Failed",
+        error.message || "Unable to verify OTP. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!phone) {
+      Alert.alert("Error", "Phone number missing.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const data = await apiRequest("/api/auth/send-otp", {
+        method: "POST",
+        body: JSON.stringify({ phoneNumber: String(phone) }),
+      });
+
+      setOtp(["", "", "", "", "", ""]);
+      inputs.current[0]?.focus();
+
+      if (data.testOtp) {
+        Alert.alert("Testing OTP", `Your new OTP is: ${data.testOtp}`);
+      } else {
+        Alert.alert("OTP", "A new OTP has been requested.");
+      }
+    } catch (error) {
+      Alert.alert("Resend Failed", error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -45,6 +146,7 @@ export default function OtpScreen() {
         <Pressable
           style={styles.backButton}
           onPress={() => router.back()}
+          disabled={loading}
         >
           <Text style={styles.back}>‹</Text>
         </Pressable>
@@ -56,7 +158,7 @@ export default function OtpScreen() {
         <Text style={styles.title}>Verify your number</Text>
 
         <Text style={styles.subtitle}>
-          Enter the 6-digit verification code sent to your mobile number.
+          Enter the 6-digit verification code for +91 {phone}.
         </Text>
 
         <View style={styles.otpRow}>
@@ -76,24 +178,30 @@ export default function OtpScreen() {
               keyboardType="number-pad"
               maxLength={1}
               selectTextOnFocus
+              editable={!loading}
             />
           ))}
         </View>
 
         <Pressable
-          style={styles.button}
-          onPress={() => router.replace("/home")}
+          style={[styles.button, loading && styles.disabledButton]}
+          onPress={handleVerify}
+          disabled={loading}
         >
-          <Text style={styles.buttonText}>Verify & Continue</Text>
-          <Text style={styles.arrow}>→</Text>
+          {loading ? (
+            <ActivityIndicator color="#062020" />
+          ) : (
+            <>
+              <Text style={styles.buttonText}>Verify & Continue</Text>
+              <Text style={styles.arrow}>→</Text>
+            </>
+          )}
         </Pressable>
 
         <Pressable
           style={styles.resendButton}
-          onPress={() => {
-            setOtp(["", "", "", "", "", ""]);
-            inputs.current[0]?.focus();
-          }}
+          onPress={handleResend}
+          disabled={loading}
         >
           <Text style={styles.resendText}>
             Didn't receive the code?{" "}
@@ -102,7 +210,7 @@ export default function OtpScreen() {
         </Pressable>
 
         <Text style={styles.note}>
-          Demo UI only — OTP is not sent or verified yet.
+          Development testing only — OTP is generated by the backend.
         </Text>
       </View>
     </KeyboardAvoidingView>
@@ -188,6 +296,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
   buttonText: {
     color: "#062020",
