@@ -13,7 +13,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { apiRequest } from "../constants/Api";
+import { apiRequest, setAuthToken } from "../constants/Api";
 
 export default function SignupScreen() {
   const { phone } = useLocalSearchParams();
@@ -44,13 +44,19 @@ export default function SignupScreen() {
     try {
       setLoading(true);
 
-      const user = await apiRequest("/api/auth/register", {
-        method: "POST",
-        body: JSON.stringify({
-          phoneNumber: cleanPhone,
-          name: cleanName,
-        }),
-      });
+     const user = await apiRequest("/api/auth/register", {
+       method: "POST",
+       body: JSON.stringify({
+         phoneNumber: cleanPhone,
+         name: cleanName,
+       }),
+     });
+
+     if (!user.token) {
+       throw new Error("Registration response mein JWT token missing hai.");
+     }
+
+     setAuthToken(user.token);
 
       Alert.alert(
         "Registration Successful",
