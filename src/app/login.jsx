@@ -40,7 +40,10 @@ export default function LoginScreen() {
         }),
       });
 
-      if (data.testOtp) {
+      // Development debugging
+      console.log("SEND OTP RESPONSE:", JSON.stringify(data));
+
+      if (data?.testOtp) {
         Alert.alert(
           "Testing OTP",
           `Your OTP is: ${data.testOtp}`,
@@ -65,7 +68,9 @@ export default function LoginScreen() {
     } catch (error) {
       Alert.alert(
         "OTP Error",
-        error.message || "Unable to send OTP. Please try again."
+        error instanceof Error
+          ? error.message
+          : "Unable to send OTP. Please try again."
       );
     } finally {
       setLoading(false);
@@ -113,11 +118,15 @@ export default function LoginScreen() {
             onChangeText={(value) =>
               setPhone(value.replace(/\D/g, "").slice(0, 10))
             }
+            editable={!loading}
           />
         </View>
 
         <Pressable
-          style={[styles.button, loading && styles.disabledButton]}
+          style={[
+            styles.button,
+            loading && styles.disabledButton,
+          ]}
           onPress={handleContinue}
           disabled={loading}
         >
@@ -137,7 +146,12 @@ export default function LoginScreen() {
           </Text>
 
           <Pressable
-            onPress={() => router.push("/signup")}
+            onPress={() =>
+              Alert.alert(
+                "Create Account",
+                "Enter your mobile number above and press Continue. After OTP verification, you can create your account."
+              )
+            }
             disabled={loading}
           >
             <Text style={styles.link}>Sign Up</Text>

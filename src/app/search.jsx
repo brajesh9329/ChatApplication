@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import {
   View,
@@ -61,6 +62,8 @@ export default function SearchScreen() {
     } catch (err) {
       const message = err?.message || "";
 
+      console.log("SEARCH USER ERROR:", message);
+
       setError(
         /not found|user not found|404/i.test(message)
           ? "This number is not registered on ChatFlow."
@@ -93,12 +96,24 @@ export default function SearchScreen() {
     setError("");
 
     try {
+      console.log("START CHAT REQUEST:", {
+        otherUserId: String(foundUser.id),
+      });
+
+      // Backend expects only otherUserId.
+      // Current user ID comes from the JWT token.
       const chat = await apiRequest(
-        `/api/chats/direct?userId1=${encodeURIComponent(String(loggedInUserId))}` +
-          `&userId2=${encodeURIComponent(String(foundUser.id))}`,
+        `/api/chats/direct?otherUserId=${encodeURIComponent(
+          String(foundUser.id)
+        )}`,
         {
           method: "POST",
         }
+      );
+
+      console.log(
+        "CREATE CHAT RESPONSE:",
+        JSON.stringify(chat)
       );
 
       const chatId = chat?.id ?? chat?.chatId;
@@ -108,6 +123,8 @@ export default function SearchScreen() {
           "Chat ID response mein nahi mili. Direct chat API response check karo."
         );
       }
+
+      console.log("NAVIGATING TO CHAT:", String(chatId));
 
       router.push({
         pathname: "/chat",
@@ -120,6 +137,7 @@ export default function SearchScreen() {
         },
       });
     } catch (err) {
+      console.log("START CHAT ERROR:", err?.message);
       setError(err?.message || "Unable to start chat.");
     } finally {
       setStartingChat(false);
@@ -209,7 +227,10 @@ export default function SearchScreen() {
                 </Text>
 
                 {foundUser.about ? (
-                  <Text style={styles.about} numberOfLines={2}>
+                  <Text
+                    style={styles.about}
+                    numberOfLines={2}
+                  >
                     {foundUser.about}
                   </Text>
                 ) : null}
@@ -226,7 +247,9 @@ export default function SearchScreen() {
                 {startingChat ? (
                   <ActivityIndicator color="#062020" />
                 ) : (
-                  <Text style={styles.chatButtonText}>Chat</Text>
+                  <Text style={styles.chatButtonText}>
+                    Chat
+                  </Text>
                 )}
               </Pressable>
             </>
