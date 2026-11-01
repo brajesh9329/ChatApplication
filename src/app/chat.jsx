@@ -1,3 +1,4 @@
+
 import {
   View,
   Text,
@@ -13,12 +14,17 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { Client } from "@stomp/stompjs";
-import { apiRequest, API_BASE_URL } from "../constants/Api";
+import {
+  apiRequest,
+  API_BASE_URL,
+  getAuthToken,
+} from "../constants/Api";
 
 const formatTime = (value) => {
   if (!value) return "";
 
   const date = new Date(value);
+
   if (Number.isNaN(date.getTime())) return "";
 
   return date.toLocaleTimeString([], {
@@ -27,13 +33,24 @@ const formatTime = (value) => {
   });
 };
 
+const getParam = (value) => {
+  if (Array.isArray(value)) {
+    return String(value[0] ?? "");
+  }
+
+  return String(value ?? "");
+};
+
+const getMessageSenderId = (message) => {
+  return message.senderId ?? message.sender?.id ?? null;
+};
+
 export default function ChatScreen() {
   const params = useLocalSearchParams();
 
-  const chatId = String(params.chatId ?? params.id ?? "");
-  const userId = String(params.userId ?? "");
-  const participantId = String(params.participantId ?? "");
-  const chatName = String(params.name ?? "Chat");
+  const chatId = getParam(params.chatId || params.id);
+  const userId = getParam(params.userId);
+  const chatName = getParam(params.name) || "Chat";
 
   const [messages, setMessages] = useState([]);
   const [messageText, setMessageText] = useState("");
@@ -41,31 +58,37 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [connected, setConnected] = useState(false);
+  const [connectionError, setConnectionError] = useState("");
 
   const clientRef = useRef(null);
   const listRef = useRef(null);
   const messageIdsRef = useRef(new Set());
 
-  const addMessage = useCallback((message) => {
-    if (!message?.id) return;
+  const addMessage = useCallback(
+    (message) => {
+      if (message?.id == null) return;
 
-    const key = String(message.id);
+      const key = String(message.id);
 
-    if (messageIdsRef.current.has(key)) return;
+      if (messageIdsRef.current.has(key)) {
+        return;
+      }
 
-    messageIdsRef.current.add(key);
+      messageIdsRef.current.add(key);
 
-    setMessages((previous) => [
-      ...previous,
-      {
+      const newMessage = {
         id: key,
         text: message.content ?? "",
         time: formatTime(message.createdAt),
-        mine: String(message.senderId) === userId,
-      },
-    ]);
-  }, [userId]);
+        mine: String(getMessageSenderId(message)) === userId,
+      };
 
+      setMessages((previous) => [...previous, newMessage]);
+    },
+    [userId]
+  );
+
+  // Load chat message history
   const loadMessages = useCallback(async () => {
     if (!chatId || !userId) {
       setError("Chat ID ya logged-in user ID nahi mila.");
@@ -78,8 +101,7 @@ export default function ChatScreen() {
 
     try {
       const response = await apiRequest(
-        `/api/messages/chat/${encodeURIComponent(chatId)}` +
-        `?userId=${encodeURIComponent(userId)}&page=0&size=100`
+        `/api/messages/chat/${encodeURIComponent(chatId)}?page=0&size=100`
       );
 
       const content = Array.isArray(response)
@@ -87,31 +109,47 @@ export default function ChatScreen() {
         : response?.content;
 
       if (!Array.isArray(content)) {
-        throw new Error("Message history ka response valid nahi hai.");
+        throw new Error(
+          "Message history ka response valid nahi hai."
+        );
       }
 
       const sorted = [...content].sort((a, b) => {
-        const timeA = new Date(a.createdAt).getTime();
-        const timeB = new Date(b.createdAt).getTime();
+        const timeA = new Date(a.createdAt).getTime() || 0;
+        const timeB = new Date(b.createdAt).getTime() || 0;
 
-        if (timeA !== timeB) return timeA - timeB;
+        if (timeA !== timeB) {
+          return timeA - timeB;
+        }
+
         return Number(a.id) - Number(b.id);
       });
 
       messageIdsRef.current = new Set(
-        sorted.map((message) => String(message.id))
+        sorted
+          .filter((message) => message?.id != null)
+          .map((message) => String(message.id))
       );
 
       setMessages(
-        sorted.map((message) => ({
-          id: String(message.id),
-          text: message.content ?? "",
-          time: formatTime(message.createdAt),
-          mine: String(message.senderId) === userId,
-        }))
+        sorted
+          .filter((message) => message?.id != null)
+          .map((message) => ({
+            id: String(message.id),
+            text: message.content ?? "",
+            time: formatTime(message.createdAt),
+            mine:
+              String(getMessageSenderId(message)) === userId,
+          }))
       );
+
+      console.log("MESSAGE HISTORY LOADED:", sorted.length);
     } catch (err) {
-      setError(err.message || "Messages load nahi ho paaye.");
+      console.log("LOAD MESSAGES ERROR:", err?.message);
+
+      setError(
+        err?.message || "Messages load nahi ho paaye."
+      );
     } finally {
       setLoading(false);
     }
@@ -121,129 +159,224 @@ export default function ChatScreen() {
     loadMessages();
   }, [loadMessages]);
 
+  // Background refresh as a fallback
+  const refreshMessages = useCallback(async () => {
+    if (!chatId || !userId) return;
 
+    try {
+      const response = await apiRequest(
+        `/api/messages/chat/${encodeURIComponent(chatId)}?page=0&size=100`
+      );
 
-  // new update
-const refreshMessages = useCallback(async () => {
-  if (!chatId || !userId) return;
+      const content = Array.isArray(response)
+        ? response
+        : response?.content;
 
-  try {
-    const response = await apiRequest(
-      `/api/messages/chat/${encodeURIComponent(chatId)}` +
-        `?userId=${encodeURIComponent(userId)}&page=0&size=100`
-    );
+      if (!Array.isArray(content)) return;
 
-    const content = Array.isArray(response)
-      ? response
-      : response?.content;
+      const sorted = [...content].sort((a, b) => {
+        const timeA = new Date(a.createdAt).getTime() || 0;
+        const timeB = new Date(b.createdAt).getTime() || 0;
 
-    if (!Array.isArray(content)) return;
-
-    content.forEach((message) => {
-      if (!message?.id) return;
-
-      const key = String(message.id);
-
-      if (messageIdsRef.current.has(key)) return;
-
-      messageIdsRef.current.add(key);
-
-      setMessages((previous) => [
-        ...previous,
-        {
-          id: key,
-          text: message.content ?? "",
-          time: formatTime(message.createdAt),
-          mine: String(message.senderId) === userId,
-        },
-      ]);
-    });
-  } catch (err) {
-    console.log("Background message refresh failed:", err.message);
-  }
-}, [chatId, userId]);
-
-useEffect(() => {
-  if (!chatId || !userId) return;
-
-  const intervalId = setInterval(() => {
-    refreshMessages();
-  }, 2000);
-
-  return () => clearInterval(intervalId);
-}, [chatId, userId, refreshMessages]);
-
-
-
-useEffect(() => {
-  if (!chatId || !userId) return;
-
-  const wsUrl =
-    API_BASE_URL.replace(/\/$/, "")
-      .replace(/^https:/, "wss:")
-      .replace(/^http:/, "ws:") + "/ws";
-
-  console.log("WebSocket URL:", wsUrl);
-
-  const client = new Client({
-    webSocketFactory: () => new WebSocket(wsUrl),
-    reconnectDelay: 5000,
-
-    onConnect: () => {
-      console.log("STOMP connected");
-      setConnected(true);
-
-      client.subscribe(`/topic/chat/${chatId}`, (frame) => {
-        try {
-          addMessage(JSON.parse(frame.body));
-        } catch (error) {
-          console.warn("Message parsing error:", error);
-        }
+        return timeA - timeB;
       });
-    },
 
-    onWebSocketError: (event) => {
-      console.warn("WebSocket error:", event?.message);
-    },
+      sorted.forEach((message) => {
+        addMessage(message);
+      });
+    } catch (err) {
+      console.log(
+        "BACKGROUND MESSAGE REFRESH ERROR:",
+        err?.message
+      );
+    }
+  }, [chatId, userId, addMessage]);
 
-    onWebSocketClose: (event) => {
-      console.log("WebSocket closed:", event?.code, event?.reason);
-      setConnected(false);
-    },
+  useEffect(() => {
+    if (!chatId || !userId) return;
 
-    onStompError: (frame) => {
-      console.warn("STOMP error:", frame.headers?.message);
-      setConnected(false);
-    },
-  });
+    const intervalId = setInterval(() => {
+      refreshMessages();
+    }, 2000);
 
-  clientRef.current = client;
-  client.activate();
+    return () => clearInterval(intervalId);
+  }, [chatId, userId, refreshMessages]);
 
-  return () => {
-    clientRef.current = null;
-    setConnected(false);
-    client.deactivate();
-  };
-}, [chatId, userId, addMessage]);
+  // WebSocket connection with JWT authentication
+  useEffect(() => {
+    if (!chatId || !userId) return;
 
+    const wsUrl =
+      API_BASE_URL.replace(/\/$/, "")
+        .replace(/^https:/, "wss:")
+        .replace(/^http:/, "ws:") + "/ws";
+
+    console.log("WEBSOCKET URL:", wsUrl);
+
+    let active = true;
+
+    const client = new Client({
+      webSocketFactory: () => new WebSocket(wsUrl),
+
+      // Send JWT in STOMP CONNECT headers
+      beforeConnect: () => {
+        const token = getAuthToken();
+
+        if (!token) {
+          console.log(
+            "WEBSOCKET ERROR: JWT token missing"
+          );
+
+          throw new Error(
+            "JWT token missing. Please login again."
+          );
+        }
+
+        client.connectHeaders = {
+          Authorization: `Bearer ${token}`,
+        };
+
+        console.log("STOMP JWT HEADER CONFIGURED");
+      },
+
+      reconnectDelay: 5000,
+      connectionTimeout: 10000,
+      heartbeatIncoming: 0,
+      heartbeatOutgoing: 0,
+
+      debug: (message) => {
+        // Do not expose JWT from STOMP CONNECT debug logs.
+        if (message.startsWith(">>> CONNECT")) {
+          console.log(
+            "STOMP DEBUG: Sending CONNECT frame"
+          );
+          return;
+        }
+
+        console.log("STOMP DEBUG:", message);
+      },
+
+      onConnect: (frame) => {
+        if (!active) return;
+
+        console.log(
+          "STOMP CONNECTED:",
+          frame?.headers
+        );
+
+        setConnected(true);
+        setConnectionError("");
+
+        client.subscribe(
+          `/topic/chat/${chatId}`,
+          (messageFrame) => {
+            try {
+              const receivedMessage = JSON.parse(
+                messageFrame.body
+              );
+
+              console.log(
+                "WEBSOCKET MESSAGE RECEIVED:",
+                receivedMessage?.id
+              );
+
+              addMessage(receivedMessage);
+            } catch (err) {
+              console.warn(
+                "WEBSOCKET MESSAGE PARSE ERROR:",
+                err?.message
+              );
+            }
+          }
+        );
+      },
+
+      onWebSocketError: (event) => {
+        if (!active) return;
+
+        console.warn("WEBSOCKET ERROR EVENT:", {
+          type: event?.type,
+          message: event?.message,
+          nativeEvent: event?.nativeEvent,
+        });
+
+        setConnected(false);
+        setConnectionError(
+          "WebSocket connection failed."
+        );
+      },
+
+      onWebSocketClose: (event) => {
+        if (!active) return;
+
+        console.log("WEBSOCKET CLOSED:", {
+          code: event?.code,
+          reason: event?.reason,
+          wasClean: event?.wasClean,
+        });
+
+        setConnected(false);
+
+        if (event?.code !== 1000) {
+          setConnectionError(
+            `WebSocket disconnected (${event?.code ?? "unknown"}).`
+          );
+        }
+      },
+
+      onStompError: (frame) => {
+        if (!active) return;
+
+        console.warn("STOMP ERROR:", {
+          message: frame?.headers?.message,
+          body: frame?.body,
+        });
+
+        setConnected(false);
+
+        setConnectionError(
+          frame?.headers?.message ||
+            "STOMP connection failed."
+        );
+      },
+
+      onDisconnect: () => {
+        if (!active) return;
+
+        console.log("STOMP DISCONNECTED");
+        setConnected(false);
+      },
+    });
+
+    clientRef.current = client;
+    client.activate();
+
+    return () => {
+      active = false;
+      clientRef.current = null;
+      client.deactivate();
+    };
+  }, [chatId, userId, addMessage]);
+
+  // Send message using REST API
   const sendMessage = async () => {
     const content = messageText.trim();
 
     if (!content || sending) return;
 
     if (!chatId || !userId) {
-      Alert.alert("Error", "Chat ID ya user ID missing hai.");
+      Alert.alert(
+        "Error",
+        "Chat ID ya logged-in user ID missing hai."
+      );
       return;
     }
 
     setSending(true);
 
     try {
-      // REST endpoint saves the message to the database.
       const savedMessage = await apiRequest(
-        `/api/messages/chat/${encodeURIComponent(chatId)}` +
-        `/sender/${encodeURIComponent(userId)}`,
+        `/api/messages/chat/${encodeURIComponent(chatId)}`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -253,10 +386,23 @@ useEffect(() => {
         }
       );
 
+      console.log(
+        "MESSAGE SENT:",
+        savedMessage?.id
+      );
+
       addMessage(savedMessage);
       setMessageText("");
     } catch (err) {
-      Alert.alert("Message failed", err.message || "Message send nahi hua.");
+      console.log(
+        "SEND MESSAGE ERROR:",
+        err?.message
+      );
+
+      Alert.alert(
+        "Message failed",
+        err?.message || "Message send nahi hua."
+      );
     } finally {
       setSending(false);
     }
@@ -265,8 +411,12 @@ useEffect(() => {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
+      behavior={
+        Platform.OS === "ios" ? "padding" : undefined
+      }
+      keyboardVerticalOffset={
+        Platform.OS === "ios" ? 10 : 0
+      }
     >
       <View style={styles.header}>
         <Pressable
@@ -278,6 +428,7 @@ useEffect(() => {
 
         <View style={styles.userAvatar}>
           <Text style={styles.avatarText}>👤</Text>
+
           <View
             style={[
               styles.online,
@@ -287,9 +438,13 @@ useEffect(() => {
         </View>
 
         <View style={styles.userInfo}>
-          <Text style={styles.userName} numberOfLines={1}>
+          <Text
+            style={styles.userName}
+            numberOfLines={1}
+          >
             {chatName}
           </Text>
+
           <View style={styles.statusRow}>
             <View
               style={[
@@ -297,8 +452,13 @@ useEffect(() => {
                 !connected && styles.offline,
               ]}
             />
+
             <Text style={styles.status}>
-              {connected ? "Connected" : "Connecting..."}
+              {connected
+                ? "Connected"
+                : connectionError
+                  ? "Disconnected"
+                  : "Connecting..."}
             </Text>
           </View>
         </View>
@@ -312,16 +472,39 @@ useEffect(() => {
         </Pressable>
       </View>
 
+      {connectionError ? (
+        <View style={styles.connectionBanner}>
+          <Text style={styles.connectionBannerText}>
+            {connectionError} Messages can still be sent
+            through the REST API.
+          </Text>
+        </View>
+      ) : null}
+
       {loading ? (
         <View style={styles.centerState}>
-          <ActivityIndicator size="large" color="#18D6D1" />
-          <Text style={styles.stateText}>Loading messages...</Text>
+          <ActivityIndicator
+            size="large"
+            color="#18D6D1"
+          />
+
+          <Text style={styles.stateText}>
+            Loading messages...
+          </Text>
         </View>
       ) : error ? (
         <View style={styles.centerState}>
-          <Text style={styles.stateText}>{error}</Text>
-          <Pressable style={styles.retryButton} onPress={loadMessages}>
-            <Text style={styles.retryText}>Try Again</Text>
+          <Text style={styles.stateText}>
+            {error}
+          </Text>
+
+          <Pressable
+            style={styles.retryButton}
+            onPress={loadMessages}
+          >
+            <Text style={styles.retryText}>
+              Try Again
+            </Text>
           </Pressable>
         </View>
       ) : (
@@ -331,9 +514,11 @@ useEffect(() => {
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.messages}
-          onContentSizeChange={() =>
-            listRef.current?.scrollToEnd({ animated: true })
-          }
+          onContentSizeChange={() => {
+            listRef.current?.scrollToEnd({
+              animated: true,
+            });
+          }}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Text style={styles.stateText}>
@@ -348,18 +533,27 @@ useEffect(() => {
                 item.mine && styles.myMessageContainer,
               ]}
             >
-             <View
-        style={[
-          styles.messageBubble,
-          item.mine ? styles.myMessage : styles.otherMessage,
-        ]}
-      >
-                <Text style={styles.messageText}>{item.text}</Text>
+              <View
+                style={[
+                  styles.bubble,
+                  item.mine
+                    ? styles.myBubble
+                    : styles.otherBubble,
+                ]}
+              >
+                <Text style={styles.messageText}>
+                  {item.text}
+                </Text>
 
                 <View style={styles.timeRow}>
-                  <Text style={styles.messageTime}>{item.time}</Text>
+                  <Text style={styles.messageTime}>
+                    {item.time}
+                  </Text>
+
                   {item.mine && (
-                    <Text style={styles.readIcon}>✓</Text>
+                    <Text style={styles.readIcon}>
+                      ✓
+                    </Text>
                   )}
                 </View>
               </View>
@@ -372,7 +566,10 @@ useEffect(() => {
         <Pressable
           style={styles.attachButton}
           onPress={() =>
-            Alert.alert("Attachments", "Attachment support will be added next.")
+            Alert.alert(
+              "Attachments",
+              "Attachment support will be added next."
+            )
           }
         >
           <Text style={styles.attach}>＋</Text>
@@ -388,9 +585,12 @@ useEffect(() => {
             multiline
             maxLength={4000}
           />
+
           <Pressable
             style={styles.emojiButton}
-            onPress={() => setMessageText((text) => text + " 😊")}
+            onPress={() =>
+              setMessageText((text) => text + " 😊")
+            }
           >
             <Text style={styles.emoji}>☺</Text>
           </Pressable>
@@ -399,7 +599,10 @@ useEffect(() => {
         <Pressable
           style={styles.cameraButton}
           onPress={() =>
-            Alert.alert("Camera", "Camera support will be added next.")
+            Alert.alert(
+              "Camera",
+              "Camera support will be added next."
+            )
           }
         >
           <Text style={styles.camera}>◎</Text>
@@ -408,13 +611,17 @@ useEffect(() => {
         <Pressable
           style={[
             styles.sendButton,
-            (!messageText.trim() || sending) && styles.disabledSend,
+            (!messageText.trim() || sending) &&
+              styles.disabledSend,
           ]}
           onPress={sendMessage}
           disabled={!messageText.trim() || sending}
         >
           {sending ? (
-            <ActivityIndicator size="small" color="#062020" />
+            <ActivityIndicator
+              size="small"
+              color="#062020"
+            />
           ) : (
             <Text style={styles.send}>➤</Text>
           )}
@@ -456,9 +663,9 @@ const styles = StyleSheet.create({
     height: 45,
     borderRadius: 23,
     backgroundColor: "#234545",
+    position: "relative",
     alignItems: "center",
     justifyContent: "center",
-    position: "relative",
   },
   avatarText: {
     fontSize: 21,
@@ -669,5 +876,15 @@ const styles = StyleSheet.create({
     color: "#062020",
     fontSize: 12,
     fontWeight: "800",
+  },
+  connectionBanner: {
+    backgroundColor: "#51352B",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  connectionBannerText: {
+    color: "#FFD6B5",
+    fontSize: 11,
+    textAlign: "center",
   },
 });

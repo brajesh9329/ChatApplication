@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { apiRequest } from "../constants/Api";
+import { apiRequest, setAuthToken } from "../constants/Api";
 
 export default function OtpScreen() {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
@@ -20,6 +20,7 @@ export default function OtpScreen() {
   const inputs = useRef([]);
 
   const { phone } = useLocalSearchParams();
+  const phoneNumber = Array.isArray(phone) ? phone[0] : phone;
 
   const handleChange = (value, index) => {
     const digit = value.replace(/\D/g, "").slice(-1);
@@ -46,7 +47,7 @@ export default function OtpScreen() {
   const handleVerify = async () => {
     const enteredOtp = otp.join("");
 
-    if (!phone) {
+    if (!phoneNumber) {
       Alert.alert("Error", "Phone number missing. Please try again.");
       return;
     }
@@ -59,23 +60,34 @@ export default function OtpScreen() {
     try {
       setLoading(true);
 
-      // Step 1: Verify OTP with backend
+      // Step 1: Verify OTP
       const verification = await apiRequest("/api/auth/verify-otp", {
         method: "POST",
         body: JSON.stringify({
-          phoneNumber: String(phone),
+          phoneNumber: String(phoneNumber),
           otp: enteredOtp,
         }),
       });
 
       if (verification.registered) {
-        // Step 2A: Existing user — login
+        // Step 2: Login existing user
         const user = await apiRequest("/api/auth/login", {
           method: "POST",
           body: JSON.stringify({
-            phoneNumber: String(phone),
+            phoneNumber: String(phoneNumber),
           }),
         });
+
+        // Step 3: Save JWT token
+        if (!user.token) {
+          throw new Error("Login response mein JWT token missing hai.");
+        }
+
+        setAuthToken(user.token);
+
+        if (user.userId == null) {
+          throw new Error("Login response mein user ID missing hai.");
+        }
 
         Alert.alert("Success", "Login successful!", [
           {
@@ -86,16 +98,18 @@ export default function OtpScreen() {
                 params: {
                   userId: String(user.userId),
                   name: user.name ?? "",
-                  phone: String(phone),
+                  phone: String(phoneNumber),
                 },
               }),
           },
         ]);
       } else {
-        // Step 2B: New user — continue to registration
+        // New user: Continue to signup
         router.replace({
           pathname: "/signup",
-          params: { phone: String(phone) },
+          params: {
+            phone: String(phoneNumber),
+          },
         });
       }
     } catch (error) {
@@ -109,7 +123,7 @@ export default function OtpScreen() {
   };
 
   const handleResend = async () => {
-    if (!phone) {
+    if (!phoneNumber) {
       Alert.alert("Error", "Phone number missing.");
       return;
     }
@@ -119,7 +133,9 @@ export default function OtpScreen() {
 
       const data = await apiRequest("/api/auth/send-otp", {
         method: "POST",
-        body: JSON.stringify({ phoneNumber: String(phone) }),
+        body: JSON.stringify({
+          phoneNumber: String(phoneNumber),
+        }),
       });
 
       setOtp(["", "", "", "", "", ""]);
@@ -131,7 +147,10 @@ export default function OtpScreen() {
         Alert.alert("OTP", "A new OTP has been requested.");
       }
     } catch (error) {
-      Alert.alert("Resend Failed", error.message);
+      Alert.alert(
+        "Resend Failed",
+        error.message || "Unable to resend OTP."
+      );
     } finally {
       setLoading(false);
     }
@@ -158,7 +177,7 @@ export default function OtpScreen() {
         <Text style={styles.title}>Verify your number</Text>
 
         <Text style={styles.subtitle}>
-          Enter the 6-digit verification code for +91 {phone}.
+          Enter the 6-digit verification code for +91 {phoneNumber}.
         </Text>
 
         <View style={styles.otpRow}>
@@ -184,7 +203,10 @@ export default function OtpScreen() {
         </View>
 
         <Pressable
-          style={[styles.button, loading && styles.disabledButton]}
+          style={[
+            styles.button,
+            loading && styles.disabledButton,
+          ]}
           onPress={handleVerify}
           disabled={loading}
         >
@@ -192,7 +214,9 @@ export default function OtpScreen() {
             <ActivityIndicator color="#062020" />
           ) : (
             <>
-              <Text style={styles.buttonText}>Verify & Continue</Text>
+              <Text style={styles.buttonText}>
+                Verify & Continue
+              </Text>
               <Text style={styles.arrow}>→</Text>
             </>
           )}

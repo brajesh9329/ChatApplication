@@ -16,26 +16,28 @@ import { router, useLocalSearchParams } from "expo-router";
 import { apiRequest } from "../constants/Api";
 
 export default function SignupScreen() {
-  const [name, setName] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  // Phone number OTP screen se receive hoga
   const { phone } = useLocalSearchParams();
+
+  const [name, setName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState(
+    String(phone || "")
+  );
+  const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
     const cleanName = name.trim();
-    const cleanPhone = String(phone || "").trim();
-
-    if (!cleanPhone) {
-      Alert.alert(
-        "Phone Number Missing",
-        "Please go back and verify your phone number again."
-      );
-      return;
-    }
+    const cleanPhone = phoneNumber.trim();
 
     if (!cleanName) {
       Alert.alert("Name Required", "Please enter your full name.");
+      return;
+    }
+
+    if (!/^[0-9]{10}$/.test(cleanPhone)) {
+      Alert.alert(
+        "Invalid Mobile Number",
+        "Please enter a valid 10-digit mobile number."
+      );
       return;
     }
 
@@ -70,10 +72,12 @@ export default function SignupScreen() {
         ]
       );
     } catch (error) {
-      Alert.alert(
-        "Registration Failed",
-        error.message || "Unable to create your account. Please try again."
-      );
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to create your account. Please try again.";
+
+      Alert.alert("Registration Failed", message);
     } finally {
       setLoading(false);
     }
@@ -104,6 +108,7 @@ export default function SignupScreen() {
 
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>👤</Text>
+
           <View style={styles.cameraBadge}>
             <Text style={styles.camera}>＋</Text>
           </View>
@@ -129,16 +134,23 @@ export default function SignupScreen() {
 
           <TextInput
             style={styles.phoneInput}
-            placeholder="Verified mobile number"
+            placeholder="Enter mobile number"
             placeholderTextColor="#668180"
             keyboardType="phone-pad"
-            value={String(phone || "")}
-            editable={false}
+            value={phoneNumber}
+            onChangeText={(text) => {
+              setPhoneNumber(text.replace(/[^0-9]/g, ""));
+            }}
+            maxLength={10}
+            editable={!loading}
           />
         </View>
 
         <Pressable
-          style={[styles.button, loading && styles.disabledButton]}
+          style={[
+            styles.button,
+            loading && styles.disabledButton,
+          ]}
           onPress={handleRegister}
           disabled={loading}
         >
@@ -146,14 +158,18 @@ export default function SignupScreen() {
             <ActivityIndicator color="#062020" />
           ) : (
             <>
-              <Text style={styles.buttonText}>Create Account</Text>
+              <Text style={styles.buttonText}>
+                Create Account
+              </Text>
               <Text style={styles.arrow}>→</Text>
             </>
           )}
         </Pressable>
 
         <View style={styles.loginRow}>
-          <Text style={styles.muted}>Already have an account? </Text>
+          <Text style={styles.muted}>
+            Already have an account?{" "}
+          </Text>
 
           <Pressable
             onPress={() => router.replace("/login")}
@@ -212,7 +228,6 @@ const styles = StyleSheet.create({
     borderColor: "#285252",
     alignItems: "center",
     justifyContent: "center",
-    alignSelf: "center",
     marginVertical: 28,
     position: "relative",
   },

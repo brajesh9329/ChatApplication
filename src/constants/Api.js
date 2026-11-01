@@ -1,20 +1,44 @@
 
-import { Platform } from "react-native";
+export const API_BASE_URL = "http://192.168.1.40:8080";
 
-// Apne laptop ka IPv4 address yahan likhna.
-// Example: http://192.168.1.5:8080
-export const API_BASE_URL = "http://10.160.214.98:8080";
+// JWT token stored after login
+let authToken = null;
 
+// Save JWT token
+export function setAuthToken(token) {
+  authToken = token;
+}
+
+// Get JWT token for WebSocket authentication
+export function getAuthToken() {
+  console.log("JWT TOKEN:", authToken);
+  return authToken;
+}
+
+// Clear JWT token on logout
+export function clearAuthToken() {
+  authToken = null;
+}
+
+// API request with JWT authentication
 export async function apiRequest(path, options = {}) {
+  const headers = {
+    "Content-Type": "application/json",
+
+    ...(authToken
+      ? { Authorization: `Bearer ${authToken}` }
+      : {}),
+
+    ...options.headers,
+  };
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
+    headers,
   });
 
   const text = await response.text();
+
   let data = {};
 
   try {
@@ -25,7 +49,9 @@ export async function apiRequest(path, options = {}) {
 
   if (!response.ok) {
     throw new Error(
-      data.message || data.error || `Request failed (${response.status})`
+      data.message ||
+        data.error ||
+        `Request failed (${response.status})`
     );
   }
 
