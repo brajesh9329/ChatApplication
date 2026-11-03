@@ -43,7 +43,13 @@ const formatChatTime = (value) => {
 };
 
 export default function HomeScreen() {
-  const { userId, name, phone } = useLocalSearchParams();
+ const {
+  userId,
+  name,
+  phone,
+  profileImage,
+  about,
+} = useLocalSearchParams();
 
   const [chats, setChats] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -52,7 +58,15 @@ export default function HomeScreen() {
   const [search, setSearch] = useState("");
 
   const currentUserId = Array.isArray(userId) ? userId[0] : userId;
+  
   const displayName = Array.isArray(name) ? name[0] : name;
+  const currentUserPhone = Array.isArray(phone) ? phone[0] : phone;
+
+const currentProfileImage = Array.isArray(profileImage)
+  ? profileImage[0]
+  : profileImage;
+
+const currentAbout = Array.isArray(about) ? about[0] : about;
 
   const loadChats = useCallback(async (isRefresh = false) => {
     if (!currentUserId) {
@@ -127,11 +141,22 @@ export default function HomeScreen() {
 
         <View style={styles.headerActions}>
           <Pressable
-            style={styles.headerButton}
-            onPress={() => router.push("/profile")}
-          >
-            <Text style={styles.headerIcon}>👤</Text>
-          </Pressable>
+  style={styles.headerButton}
+  onPress={() =>
+    router.push({
+      pathname: "/profile",
+      params: {
+        userId: String(currentUserId || ""),
+        name: String(displayName || ""),
+        phone: String(currentUserPhone || ""),
+        profileImage: String(currentProfileImage || ""),
+        about: String(currentAbout || ""),
+      },
+    })
+  }
+>
+  <Text style={styles.headerIcon}>👤</Text>
+</Pressable>
 
           <Pressable
             style={styles.headerButton}
@@ -300,12 +325,23 @@ export default function HomeScreen() {
         </Pressable>
 
         <Pressable
-          style={styles.navItem}
-          onPress={() => router.push("/profile")}
-        >
-          <Text style={styles.navIcon}>♙</Text>
-          <Text style={styles.navText}>Profile</Text>
-        </Pressable>
+  style={styles.navItem}
+  onPress={() =>
+    router.push({
+      pathname: "/profile",
+      params: {
+        userId: String(currentUserId || ""),
+        name: String(displayName || ""),
+        phone: String(currentUserPhone || ""),
+        profileImage: String(currentProfileImage || ""),
+        about: String(currentAbout || ""),
+      },
+    })
+  }
+>
+  <Text style={styles.navIcon}>♙</Text>
+  <Text style={styles.navText}>Profile</Text>
+</Pressable>
       </View>
     </View>
   );
