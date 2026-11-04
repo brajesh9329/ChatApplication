@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+   Image,
 } from "react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
@@ -51,6 +52,17 @@ export default function ChatScreen() {
   const chatId = getParam(params.chatId || params.id);
   const userId = getParam(params.userId);
   const chatName = getParam(params.name) || "Chat";
+  const profileImage = getParam(params.profileImage);
+
+  const getImageUrl = (path) => {
+    if (!path) return null;
+
+    if (path.startsWith("http")) {
+      return path;
+    }
+
+    return `${API_BASE_URL}${path}`;
+  };
 
   const [messages, setMessages] = useState([]);
   const [messageText, setMessageText] = useState("");
@@ -427,7 +439,15 @@ export default function ChatScreen() {
         </Pressable>
 
         <View style={styles.userAvatar}>
-          <Text style={styles.avatarText}>👤</Text>
+          {profileImage ? (
+            <Image
+              source={{ uri: getImageUrl(profileImage) }}
+              style={styles.avatarImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <Text style={styles.avatarText}>👤</Text>
+          )}
 
           <View
             style={[
@@ -887,4 +907,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: "center",
   },
+avatarImage: {
+  width: 45,
+  height: 45,
+  borderRadius: 23,
+},
 });

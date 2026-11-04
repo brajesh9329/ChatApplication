@@ -7,10 +7,12 @@ import {
   TextInput,
   ActivityIndicator,
   RefreshControl,
+   Image,
 } from "react-native";
 import { useCallback, useState } from "react";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { apiRequest } from "../constants/Api";
+import { API_BASE_URL } from "../constants/Api";
 
 const formatChatTime = (value) => {
   if (!value) return "";
@@ -40,6 +42,18 @@ const formatChatTime = (value) => {
     day: "2-digit",
     month: "short",
   });
+};
+
+
+
+const getImageUrl = (path) => {
+  if (!path) return null;
+
+  if (path.startsWith("http")) {
+    return path;
+  }
+
+  return `${API_BASE_URL}${path}`;
 };
 
 export default function HomeScreen() {
@@ -103,6 +117,7 @@ const currentAbout = Array.isArray(about) ? about[0] : about;
           time: formatChatTime(item.lastMessageAt),
           participantId: item.participantId,
           type: item.type,
+           profileImage: item.profileImage,
           avatar: item.type === "GROUP" ? "👥" : "👤",
         }))
       );
@@ -140,7 +155,8 @@ const currentAbout = Array.isArray(about) ? about[0] : about;
         </View>
 
         <View style={styles.headerActions}>
-          <Pressable
+
+<Pressable
   style={styles.headerButton}
   onPress={() =>
     router.push({
@@ -155,7 +171,14 @@ const currentAbout = Array.isArray(about) ? about[0] : about;
     })
   }
 >
-  <Text style={styles.headerIcon}>👤</Text>
+  {currentProfileImage ? (
+    <Image
+      source={{ uri: getImageUrl(currentProfileImage) }}
+      style={{ width: 35, height: 35, borderRadius: 18 }}
+    />
+  ) : (
+    <Text style={styles.headerIcon}>👤</Text>
+  )}
 </Pressable>
 
           <Pressable
@@ -261,14 +284,23 @@ const currentAbout = Array.isArray(about) ? about[0] : about;
                           : "",
                       name: chat.name,
                       phone: phone ? String(phone) : "",
+                      profileImage: chat.profileImage || "",
                     },
                   })
                 }
               >
                 <View style={styles.avatarContainer}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>{chat.avatar}</Text>
-                  </View>
+                  {chat.profileImage ? (
+                    <Image
+                      source={{ uri: getImageUrl(chat.profileImage) }}
+                      style={styles.avatar}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>{chat.avatar}</Text>
+                    </View>
+                  )}
                 </View>
 
                 <View style={styles.chatInfo}>
