@@ -97,8 +97,9 @@ const currentAbout = Array.isArray(about) ? about[0] : about;
         response.map((item) => ({
           id: String(item.chatId),
           name:
-            item.participantName ||
-            (item.type === "GROUP" ? "Group Chat" : "Unknown User"),
+  item.savedName ||
+  item.participantName ||
+  (item.type === "GROUP" ? "Group Chat" : "Unknown User"),
           message: item.lastMessage || "No messages yet",
           time: formatChatTime(item.lastMessageAt),
           participantId: item.participantId,
@@ -317,12 +318,19 @@ const currentAbout = Array.isArray(about) ? about[0] : about;
         </Pressable>
 
         <Pressable
-          style={styles.navItem}
-          onPress={() => router.push("/contacts")}
-        >
-          <Text style={styles.navIcon}>♧</Text>
-          <Text style={styles.navText}>Contacts</Text>
-        </Pressable>
+  style={styles.navItem}
+  onPress={() =>
+    router.push({
+      pathname: "/contacts",
+      params: {
+        userId: String(currentUserId),
+      },
+    })
+  }
+>
+  <Text style={styles.navIcon}>♧</Text>
+  <Text style={styles.navText}>Contacts</Text>
+</Pressable>
 
         <Pressable
   style={styles.navItem}
