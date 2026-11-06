@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { apiRequest } from "../constants/Api";
 
-export default function ContactsScreen() {
+export default function ContactsScreen({ embedded = false, isActive = true }) {
   const params = useLocalSearchParams();
 
   // Chat screen requires the logged-in user's ID.
@@ -59,9 +59,11 @@ export default function ContactsScreen() {
     }
   }, []);
 
-  useEffect(() => {
+useEffect(() => {
+  if (isActive) {
     loadContacts();
-  }, [loadContacts]);
+  }
+}, [loadContacts, isActive]);
 
   // Search contacts
   const filteredContacts = useMemo(() => {
@@ -233,23 +235,30 @@ export default function ContactsScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.back}>‹</Text>
-        </Pressable>
+    <View
+      style={[
+        styles.container,
+        { paddingTop: embedded ? 0 : 55 },
+      ]}
+    >
+      {/* Header - standalone screen only */}
+      {!embedded && (
+        <View style={styles.header}>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.back}>‹</Text>
+          </Pressable>
 
-        <View>
-          <Text style={styles.title}>Contacts</Text>
-          <Text style={styles.subtitle}>
-            {contacts.length} contacts
-          </Text>
+          <View>
+            <Text style={styles.title}>Contacts</Text>
+            <Text style={styles.subtitle}>
+              {contacts.length} contacts
+            </Text>
+          </View>
         </View>
-      </View>
+      )}
 
       {/* Search */}
       <View style={styles.searchBox}>
@@ -436,12 +445,11 @@ filteredContacts.map((contact) => {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#061F1F",
-    paddingTop: 55,
-    paddingHorizontal: 20,
-  },
+ container: {
+   flex: 1,
+   backgroundColor: "#061F1F",
+   paddingHorizontal: 20,
+ },
   header: {
     flexDirection: "row",
     alignItems: "center",

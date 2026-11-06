@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   router,
   useFocusEffect,
@@ -21,7 +21,7 @@ import {
   getAuthToken,
 } from "../constants/Api";
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ embedded = false, isActive = true }) {
   const params = useLocalSearchParams();
 
   const userId = Array.isArray(params.userId)
@@ -97,11 +97,21 @@ export default function ProfileScreen() {
   }, [userId]);
 
   // Reload profile whenever screen comes into focus
+  // Standalone profile screen: reload on navigation focus
   useFocusEffect(
     useCallback(() => {
-      loadProfile();
-    }, [loadProfile])
+      if (!embedded) {
+        loadProfile();
+      }
+    }, [loadProfile, embedded])
   );
+
+  // Embedded profile tab: load whenever tab becomes active
+  useEffect(() => {
+    if (embedded && isActive) {
+      loadProfile();
+    }
+  }, [embedded, isActive, loadProfile]);
 
   // Navigate to Edit Profile
   const openEditProfile = () => {
@@ -168,25 +178,29 @@ export default function ProfileScreen() {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: embedded ? 0 : 55 },
+      ]}
       showsVerticalScrollIndicator={false}
     >
 
-      {/* Header */}
-      <View style={styles.header}>
 
-        <Pressable
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.back}>‹</Text>
-        </Pressable>
+     {/* Header - standalone screen only */}
+     {!embedded && (
+       <View style={styles.header}>
+         <Pressable
+           style={styles.backButton}
+           onPress={() => router.back()}
+         >
+           <Text style={styles.back}>‹</Text>
+         </Pressable>
 
-        <Text style={styles.title}>
-          My Profile
-        </Text>
-
-      </View>
+         <Text style={styles.title}>
+           My Profile
+         </Text>
+       </View>
+     )}
 
       {/* Profile Card */}
       <View style={styles.profileCard}>
@@ -397,11 +411,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#061F1F",
   },
 
-  content: {
-    padding: 22,
-    paddingTop: 55,
-    paddingBottom: 40,
-  },
+content: {
+  padding: 22,
+  paddingBottom: 40,
+},
 
   loadingContainer: {
     flex: 1,
