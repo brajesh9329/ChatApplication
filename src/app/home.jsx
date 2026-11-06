@@ -11,8 +11,11 @@ import {
 } from "react-native";
 import { useCallback, useState } from "react";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { apiRequest } from "../constants/Api";
-import { API_BASE_URL } from "../constants/Api";
+import {
+  apiRequest,
+  API_BASE_URL,
+  getAuthToken,
+} from "../constants/Api";
 
 const formatChatTime = (value) => {
   if (!value) return "";
@@ -70,17 +73,37 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [latestProfileImage, setLatestProfileImage] = useState(null);
 
   const currentUserId = Array.isArray(userId) ? userId[0] : userId;
   
   const displayName = Array.isArray(name) ? name[0] : name;
   const currentUserPhone = Array.isArray(phone) ? phone[0] : phone;
 
-const currentProfileImage = Array.isArray(profileImage)
+const routeProfileImage = Array.isArray(profileImage)
   ? profileImage[0]
   : profileImage;
 
+const currentProfileImage =
+  latestProfileImage !== null
+    ? latestProfileImage
+    : routeProfileImage;
+
 const currentAbout = Array.isArray(about) ? about[0] : about;
+
+const loadUserProfile = useCallback(async () => {
+  if (!currentUserId) return;
+
+  try {
+    const response = await apiRequest(
+      `/api/users/${encodeURIComponent(currentUserId)}`
+    );
+
+    setLatestProfileImage(response?.profileImage || "");
+  } catch (error) {
+    console.log("HOME PROFILE IMAGE ERROR:", error);
+  }
+}, [currentUserId]);
 
   const loadChats = useCallback(async (isRefresh = false) => {
     if (!currentUserId) {
@@ -130,11 +153,12 @@ const currentAbout = Array.isArray(about) ? about[0] : about;
     }
   }, [currentUserId]);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadChats();
-    }, [loadChats])
-  );
+useFocusEffect(
+  useCallback(() => {
+    loadChats();
+    loadUserProfile();
+  }, [loadChats, loadUserProfile])
+);
 
   const filteredChats = chats.filter((chat) => {
     const query = search.trim().toLowerCase();
@@ -172,14 +196,27 @@ const currentAbout = Array.isArray(about) ? about[0] : about;
     })
   }
 >
-  {currentProfileImage ? (
-    <Image
-      source={{ uri: getImageUrl(currentProfileImage) }}
-      style={{ width: 35, height: 35, borderRadius: 18 }}
-    />
-  ) : (
-    <Text style={styles.headerIcon}>👤</Text>
-  )}
+{currentProfileImage ? (
+  <Image
+    source={{
+      uri: `${getImageUrl(currentProfileImage)}?t=${encodeURIComponent(currentProfileImage)}`,
+      headers: {
+        Authorization: `Bearer ${getAuthToken()}`,
+      },
+    }}
+    style={{
+      width: 35,
+      height: 35,
+      borderRadius: 18,
+    }}
+    resizeMode="cover"
+    onError={(e) =>
+      console.log("HOME PROFILE IMAGE ERROR:", e.nativeEvent)
+    }
+  />
+) : (
+  <Text style={styles.headerIcon}>👤</Text>
+)}
 </Pressable>
 
           <Pressable
