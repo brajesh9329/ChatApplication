@@ -652,10 +652,11 @@ export default function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#061F1F",
-  },
+ container: {
+   flex: 1,
+   backgroundColor: "#061F1F",
+   overflow: "hidden",
+ },
   header: {
     height: 92,
     paddingTop: 38,

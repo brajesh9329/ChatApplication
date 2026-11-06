@@ -9,8 +9,9 @@ import {
   RefreshControl,
    Image,
 } from "react-native";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import Skeleton from "../components/Skeleton";
 import {
   apiRequest,
   API_BASE_URL,
@@ -59,6 +60,33 @@ const getImageUrl = (path) => {
   return `${API_BASE_URL}${path}`;
 };
 
+
+
+function ChatListSkeleton() {
+  return (
+    <View style={styles.chatList}>
+      {Array.from({ length: 5 }).map((_, index) => (
+        <View key={index} style={styles.chatCard}>
+          <Skeleton width={49} height={49} radius={17} />
+
+          <View style={styles.chatInfo}>
+            <Skeleton width="55%" height={13} />
+            <Skeleton
+              width="80%"
+              height={10}
+              style={{ marginTop: 9 }}
+            />
+          </View>
+
+          <Skeleton width={38} height={9} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+
+
 export default function HomeScreen() {
  const {
   userId,
@@ -68,12 +96,16 @@ export default function HomeScreen() {
   about,
 } = useLocalSearchParams();
 
-  const [chats, setChats] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [latestProfileImage, setLatestProfileImage] = useState(null);
+ const [chats, setChats] = useState([]);
+ const [loading, setLoading] = useState(true);
+ const [refreshing, setRefreshing] = useState(false);
+ const [error, setError] = useState("");
+ const [search, setSearch] = useState("");
+ const [latestProfileImage, setLatestProfileImage] = useState(null);
+
+ const hasLoadedChats = useRef(false);
+ const [profileLoading, setProfileLoading] = useState(true);
+ const [profileImageLoading, setProfileImageLoading] = useState(true);
 
   const currentUserId = Array.isArray(userId) ? userId[0] : userId;
   
@@ -92,7 +124,12 @@ const currentProfileImage =
 const currentAbout = Array.isArray(about) ? about[0] : about;
 
 const loadUserProfile = useCallback(async () => {
-  if (!currentUserId) return;
+  if (!currentUserId) {
+    setProfileLoading(false);
+    return;
+  }
+
+  setProfileLoading(true);
 
   try {
     const response = await apiRequest(
@@ -102,6 +139,8 @@ const loadUserProfile = useCallback(async () => {
     setLatestProfileImage(response?.profileImage || "");
   } catch (error) {
     console.log("HOME PROFILE IMAGE ERROR:", error);
+  } finally {
+    setProfileLoading(false);
   }
 }, [currentUserId]);
 
@@ -113,11 +152,11 @@ const loadUserProfile = useCallback(async () => {
       return;
     }
 
-    if (isRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
+   if (isRefresh) {
+     setRefreshing(true);
+   } else if (!hasLoadedChats.current) {
+     setLoading(true);
+   }
 
     setError("");
 
@@ -148,17 +187,21 @@ const loadUserProfile = useCallback(async () => {
     } catch (err) {
       setError(err.message || "Chats load nahi ho paayi.");
     } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [currentUserId]);
+        const minimumTime = 800;
 
-useFocusEffect(
-  useCallback(() => {
-    loadChats();
-    loadUserProfile();
-  }, [loadChats, loadUserProfile])
-);
+        setTimeout(() => {
+          setLoading(false);
+          setRefreshing(false);
+        }, minimumTime);
+      }
+      }, [currentUserId]);
+
+      useFocusEffect(
+        useCallback(() => {
+          loadChats();
+          loadUserProfile();
+        }, [loadChats, loadUserProfile])
+      );
 
   const filteredChats = chats.filter((chat) => {
     const query = search.trim().toLowerCase();
@@ -197,23 +240,32 @@ useFocusEffect(
   }
 >
 {currentProfileImage ? (
-  <Image
-    source={{
-      uri: `${getImageUrl(currentProfileImage)}?t=${encodeURIComponent(currentProfileImage)}`,
-      headers: {
-        Authorization: `Bearer ${getAuthToken()}`,
-      },
-    }}
-    style={{
-      width: 35,
-      height: 35,
-      borderRadius: 18,
-    }}
-    resizeMode="cover"
-    onError={(e) =>
-      console.log("HOME PROFILE IMAGE ERROR:", e.nativeEvent)
-    }
-  />
+  <View style={styles.profileAvatarWrapper}>
+    <Image
+      source={{
+        uri: `${getImageUrl(currentProfileImage)}?t=${encodeURIComponent(currentProfileImage)}`,
+        headers: {
+          Authorization: `Bearer ${getAuthToken()}`,
+        },
+      }}
+      style={styles.profileAvatar}
+      resizeMode="cover"
+      onLoadStart={() => setProfileImageLoading(true)}
+      onLoadEnd={() => setProfileImageLoading(false)}
+      onError={() => setProfileImageLoading(false)}
+    />
+
+    {profileImageLoading && (
+      <Skeleton
+        width={35}
+        height={35}
+        radius={18}
+        style={StyleSheet.absoluteFillObject}
+      />
+    )}
+  </View>
+) : profileLoading ? (
+  <Skeleton width={35} height={35} radius={18} />
 ) : (
   <Text style={styles.headerIcon}>👤</Text>
 )}
@@ -248,10 +300,7 @@ useFocusEffect(
       </View>
 
       {loading ? (
-        <View style={styles.stateContainer}>
-          <ActivityIndicator size="large" color="#18D6D1" />
-          <Text style={styles.stateText}>Loading chats...</Text>
-        </View>
+        <ChatListSkeleton />
       ) : error ? (
         <View style={styles.stateContainer}>
           <Text style={styles.stateText}>{error}</Text>
@@ -425,11 +474,12 @@ useFocusEffect(
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#061F1F",
-    paddingTop: 55,
-  },
+ container: {
+   flex: 1,
+   backgroundColor: "#061F1F",
+   paddingTop: 55,
+   overflow: "hidden",
+ },
   header: {
     paddingHorizontal: 22,
     flexDirection: "row",
@@ -464,6 +514,18 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: "#FFFFFF",
   },
+profileAvatarWrapper: {
+  width: 35,
+  height: 35,
+  borderRadius: 18,
+  overflow: "hidden",
+},
+
+profileAvatar: {
+  width: 35,
+  height: 35,
+  borderRadius: 18,
+},
   searchBox: {
     height: 49,
     marginHorizontal: 22,
